@@ -1,0 +1,171 @@
+// BotDyNax backend data model.
+//
+// Deployed against a real (Render-managed) Postgres instance via
+// DATABASE_URL — moved off the local SQLite dev default so the backend
+// can run standalone, independent of this dev machine.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AuthProvider {
+  EMAIL
+  GOOGLE
+  APPLE
+  GUEST
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String?        @unique
+  passwordHash  String?
+  name          String
+  authProvider  AuthProvider
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  refreshTokens RefreshToken[]
+  robots        Robot[]
+  notifications Notification[]
+  tuyaLink      TuyaLink?
+}
+
+/// Links a BotDyNax user to their Tuya account (Smart Life / Tuya Smart),
+/// established via Tuya's "Link Tuya App Account" user-authorization flow.
+/// The project-level Tuya credentials (client id/secret) never touch the
+/// app or this table — they live only in backend env config
+/// (see TuyaConfigService) and every signed call to Tuya's Cloud API is
+/// made server-side.
+model TuyaLink {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tuyaUid      String
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Robot {
+  id               String            @id @default(uuid())
+  ownerId          String
+  owner            User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name             String
+  model            String
+  serialNumber     String            @unique
+  firmwareVersion  String            @default("1.0.0")
+  /// Set when this robot is backed by a Tuya-connected device (e.g. an
+  /// OEM'd product like the Milagrow iMap Max W300) rather than
+  /// BotDyNax's own BLE/WiFi/MQTT firmware. Scopes every /tuya/* call so
+  /// a user can only ever operate the Tuya device(s) tied to a robot they
+  /// own — never an arbitrary device id.
+  tuyaDeviceId     String?           @unique
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  schedules        Schedule[]
+  cleaningSessions CleaningSession[]
+  accessories      Accessory[]
+  notifications    Notification[]
+
+  @@index([ownerId])
+}
+
+model Schedule {
+  id           String   @id @default(uuid())
+  robotId      String
+  robot        Robot    @relation(fields: [robotId], references: [id], onDelete: Cascade)
+  label        String
+  daysOfWeek   String // CSV of 0(Sun)-6(Sat), or "DAILY"/"MONTHLY"/ISO date for one-off
+  time         String // "HH:mm" 24h
+  mode         String // auto | room | zone | custom
+  roomIds      String // JSON-encoded string[]
+  vacuumPower  String
+  waterLevel   String
+  enabled      Boolean  @default(true)
+  notify       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([robotId])
+}
+
+model CleaningSession {
+  id                String    @id @default(uuid())
+  robotId           String
+  robot             Robot     @relation(fields: [robotId], references: [id], onDelete: Cascade)
+  startedAt         DateTime  @default(now())
+  completedAt       DateTime?
+  areaCleanedSqm    Float     @default(0)
+  durationSeconds   Int       @default(0)
+  batteryUsedPercent Float    @default(0)
+  errors            String    @default("[]") // JSON-encoded string[]
+  mapSnapshotUrl    String?
+  cleaningScore     Int?
+
+  @@index([robotId])
+}
+
+enum AccessoryType {
+  MAIN_BRUSH
+  SIDE_BRUSH
+  FILTER
+  MOP_PAD
+  BATTERY
+  SENSOR
+}
+
+model Accessory {
+  id                  String        @id @default(uuid())
+  robotId             String
+  robot               Robot         @relation(fields: [robotId], references: [id], onDelete: Cascade)
+  type                AccessoryType
+  remainingPercent    Float         @default(1.0)
+  ratedLifetimeMinutes Int
+  usedMinutes         Int           @default(0)
+  lastReplacedAt      DateTime?
+
+  @@index([robotId])
+}
+
+enum NotificationType {
+  CLEANING_STARTED
+  CLEANING_COMPLETED
+  LOW_BATTERY
+  BRUSH_REPLACEMENT
+  FILTER_REPLACEMENT
+  WATER_EMPTY
+  DUST_BIN_FULL
+  ROBOT_OFFLINE
+  FIRMWARE_AVAILABLE
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  robotId   String?
+  robot     Robot?           @relation(fields: [robotId], references: [id], onDelete: SetNull)
+  type      NotificationType
+  message   String
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+}
