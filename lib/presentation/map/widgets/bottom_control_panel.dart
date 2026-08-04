@@ -9,6 +9,8 @@ import '../../../core/widgets/glass_card.dart';
 import '../../../domain/entities/robot_enums.dart';
 import '../../../domain/entities/robot_status.dart';
 import '../../providers/robot_providers.dart';
+import 'cleaning_preferences_sheet.dart';
+import 'station_sheet.dart';
 
 /// The floating "bottom control panel" — cleaning-mode selector plus the
 /// full set of run controls, overlaid on the Live Map so you can watch the
@@ -50,7 +52,17 @@ class BottomControlPanel extends StatelessWidget {
                 child: _ModeChip(
                   label: 'Room',
                   icon: Icons.door_front_door_outlined,
-                  onTap: selectedRoomId == null ? null : () => controller.roomClean([selectedRoomId!]),
+                  onTap: selectedRoomId == null
+                      ? controller.selectRoomClean
+                      : () => controller.roomClean([selectedRoomId!]),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: _ModeChip(
+                  label: 'Zone',
+                  icon: Icons.crop_square_rounded,
+                  onTap: () => controller.zoneClean(const []),
                 ),
               ),
               const SizedBox(width: AppSpacing.xs),
@@ -61,12 +73,36 @@ class BottomControlPanel extends StatelessWidget {
                   onTap: controller.spotClean,
                 ),
               ),
-              const SizedBox(width: AppSpacing.xs),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Row(
+            children: [
               Expanded(
                 child: _ModeChip(
                   label: 'Manual',
                   icon: Icons.gamepad_outlined,
                   onTap: () => context.push(AppRoutes.remoteControl),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: _ModeChip(
+                  label: 'Preferences',
+                  icon: Icons.tune_rounded,
+                  onTap: () => _openPreferences(context, status, controller),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: _ModeChip(
+                  label: 'Station',
+                  icon: Icons.home_repair_service_outlined,
+                  onTap: () => showModalBottomSheet<void>(
+                    context: context,
+                    isScrollControlled: true,
+                    builder: (_) => StationSheet(status: status, controller: controller),
+                  ),
                 ),
               ),
             ],
@@ -122,6 +158,24 @@ class BottomControlPanel extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _openPreferences(
+    BuildContext context,
+    RobotStatus status,
+    RobotController controller,
+  ) async {
+    final result = await showModalBottomSheet<
+        ({CleaningType type, VacuumPower power, WaterFlow water, int passes})>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => CleaningPreferencesSheet(status: status),
+    );
+    if (result == null) return;
+    await controller.setCleaningType(result.type);
+    await controller.setVacuumPower(result.power);
+    await controller.setWaterLevel(result.water);
+    await controller.setCleaningPasses(result.passes);
   }
 }
 

@@ -187,6 +187,32 @@ class SimulatorTransport implements RobotTransport {
         _status = _status.copyWith(vacuumPower: power);
       case SetWaterLevelCommand(:final level):
         _status = _status.copyWith(waterFlow: level);
+      case SetCleaningTypeCommand(:final type):
+        _status = _status.copyWith(cleaningType: type);
+      case SetCleaningPassesCommand(:final passes):
+        _status = _status.copyWith(cleaningPasses: passes);
+      case SetCarpetPreferenceCommand(:final preference):
+        _status = _status.copyWith(carpetPreference: preference);
+      case SetAutoDustCollectionCommand(:final enabled):
+        _status = _status.copyWith(autoDustCollection: enabled);
+      case SetAutoMopWashCommand(:final enabled):
+        _status = _status.copyWith(autoMopWash: enabled);
+      case SetAutoMopDryCommand(:final enabled):
+        _status = _status.copyWith(autoMopDry: enabled);
+      case TriggerDustCollectionCommand():
+      case TriggerMopWashCommand():
+      case TriggerMopDryCommand():
+      case SelectRoomCleanCommand():
+        break;
+      case SetVolumeCommand(:final percent):
+        _status = _status.copyWith(voiceVolume: percent);
+      case ResetConsumableLifeCommand(:final type):
+        _status = _status.copyWith(
+          consumables: [
+            for (final Consumable c in _status.consumables)
+              if (c.type == type) c.copyWith(remainingPercent: 1.0, usedMinutes: 0) else c,
+          ],
+        );
       case FindRobotCommand():
         _eventController.add(const CleaningStartedEvent());
       case EmergencyStopCommand():

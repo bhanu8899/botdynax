@@ -53,6 +53,18 @@ abstract final class RobotWireProtocol {
       SetVacuumMotorCommand(:final enabled) => {'cmd': 'vacuum_motor', 'enabled': enabled},
       SetWaterPumpCommand(:final enabled) => {'cmd': 'water_pump', 'enabled': enabled},
       SetLedCommand(:final enabled) => {'cmd': 'led', 'enabled': enabled},
+      SetCleaningTypeCommand(:final type) => {'cmd': 'set_cleaning_type', 'type': type.name},
+      SetCleaningPassesCommand(:final passes) => {'cmd': 'set_passes', 'passes': passes},
+      SetCarpetPreferenceCommand(:final preference) => {'cmd': 'set_carpet_pref', 'preference': preference.name},
+      TriggerDustCollectionCommand() => {'cmd': 'dust_collect'},
+      TriggerMopWashCommand() => {'cmd': 'mop_wash'},
+      TriggerMopDryCommand() => {'cmd': 'mop_dry'},
+      SetAutoDustCollectionCommand(:final enabled) => {'cmd': 'set_auto_dust_collect', 'enabled': enabled},
+      SetAutoMopWashCommand(:final enabled) => {'cmd': 'set_auto_mop_wash', 'enabled': enabled},
+      SetAutoMopDryCommand(:final enabled) => {'cmd': 'set_auto_mop_dry', 'enabled': enabled},
+      ResetConsumableLifeCommand(:final type) => {'cmd': 'reset_consumable', 'type': type.name},
+      SelectRoomCleanCommand() => {'cmd': 'select_room_clean'},
+      SetVolumeCommand(:final percent) => {'cmd': 'set_volume', 'percent': percent},
     };
   }
 

@@ -45,6 +45,13 @@ class RobotStatus extends Equatable {
     required this.isMopAttached,
     required this.faultCodes,
     required this.faultMessages,
+    required this.cleaningType,
+    required this.cleaningPasses,
+    required this.carpetPreference,
+    required this.autoDustCollection,
+    required this.autoMopWash,
+    required this.autoMopDry,
+    required this.voiceVolume,
     required this.lastUpdated,
   });
 
@@ -74,6 +81,13 @@ class RobotStatus extends Equatable {
       isMopAttached: false,
       faultCodes: const [],
       faultMessages: const [],
+      cleaningType: CleaningType.vacuumAndMop,
+      cleaningPasses: 1,
+      carpetPreference: CarpetPreference.adaptive,
+      autoDustCollection: false,
+      autoMopWash: false,
+      autoMopDry: false,
+      voiceVolume: 100,
       lastUpdated: DateTime.fromMillisecondsSinceEpoch(0),
     );
   }
@@ -125,6 +139,16 @@ class RobotStatus extends Equatable {
   /// only it knows which codes have been confirmed on real hardware.
   final List<String> faultMessages;
 
+  final CleaningType cleaningType;
+  final int cleaningPasses;
+  final CarpetPreference carpetPreference;
+  final bool autoDustCollection;
+  final bool autoMopWash;
+  final bool autoMopDry;
+
+  /// 0-100, from the real `volume_set` DP.
+  final int voiceVolume;
+
   final DateTime lastUpdated;
 
   bool get isOnline => connection == RobotConnectionState.connected;
@@ -156,6 +180,13 @@ class RobotStatus extends Equatable {
     bool? isMopAttached,
     List<int>? faultCodes,
     List<String>? faultMessages,
+    CleaningType? cleaningType,
+    int? cleaningPasses,
+    CarpetPreference? carpetPreference,
+    bool? autoDustCollection,
+    bool? autoMopWash,
+    bool? autoMopDry,
+    int? voiceVolume,
     DateTime? lastUpdated,
     bool clearCurrentRoom = false,
     bool clearCurrentTask = false,
@@ -185,6 +216,13 @@ class RobotStatus extends Equatable {
       isMopAttached: isMopAttached ?? this.isMopAttached,
       faultCodes: faultCodes ?? this.faultCodes,
       faultMessages: faultMessages ?? this.faultMessages,
+      cleaningType: cleaningType ?? this.cleaningType,
+      cleaningPasses: cleaningPasses ?? this.cleaningPasses,
+      carpetPreference: carpetPreference ?? this.carpetPreference,
+      autoDustCollection: autoDustCollection ?? this.autoDustCollection,
+      autoMopWash: autoMopWash ?? this.autoMopWash,
+      autoMopDry: autoMopDry ?? this.autoMopDry,
+      voiceVolume: voiceVolume ?? this.voiceVolume,
       lastUpdated: lastUpdated ?? this.lastUpdated,
     );
   }
@@ -215,6 +253,13 @@ class RobotStatus extends Equatable {
         isMopAttached,
         faultCodes,
         faultMessages,
+        cleaningType,
+        cleaningPasses,
+        carpetPreference,
+        autoDustCollection,
+        autoMopWash,
+        autoMopDry,
+        voiceVolume,
         lastUpdated,
       ];
 }

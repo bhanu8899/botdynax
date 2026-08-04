@@ -77,11 +77,16 @@ class _AccessoryCard extends ConsumerWidget {
   Future<void> _markReplaced(BuildContext context, WidgetRef ref) async {
     final String? robotId = ref.read(backendRobotIdProvider).valueOrNull;
     if (robotId == null) return;
+    // Resets the robot's own tracked life (writing 0 to the matching
+    // *_life DP — confirmed via the device's own thing-model description,
+    // "reset lifespan, send 0") in addition to our backend's history
+    // record, so the app and the physical robot agree on remaining life.
+    await ref.read(robotControllerProvider).resetConsumableLife(consumable.type);
     await ref.read(accessoryRepositoryProvider).sync(robotId, consumable);
     await ref.read(accessoryRepositoryProvider).markReplaced(robotId, consumable.type);
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${consumable.label} marked as replaced')),
+        SnackBar(content: Text('${consumable.label} reset on the robot and marked as replaced')),
       );
     }
   }

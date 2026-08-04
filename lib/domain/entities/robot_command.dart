@@ -177,3 +177,91 @@ class SetLedCommand extends RobotCommand {
   @override
   List<Object?> get props => [enabled];
 }
+
+/// Vacuum-only / mop-only / both / mop-after-vacuum.
+class SetCleaningTypeCommand extends RobotCommand {
+  const SetCleaningTypeCommand(this.type);
+  final CleaningType type;
+  @override
+  List<Object?> get props => [type];
+}
+
+/// How many passes the robot makes per room (1 or 2).
+class SetCleaningPassesCommand extends RobotCommand {
+  const SetCleaningPassesCommand(this.passes);
+  final int passes;
+  @override
+  List<Object?> get props => [passes];
+}
+
+/// How the robot treats carpet during a clean.
+class SetCarpetPreferenceCommand extends RobotCommand {
+  const SetCarpetPreferenceCommand(this.preference);
+  final CarpetPreference preference;
+  @override
+  List<Object?> get props => [preference];
+}
+
+/// Sends the robot to the dock and triggers a dust-collection cycle now.
+class TriggerDustCollectionCommand extends RobotCommand {
+  const TriggerDustCollectionCommand();
+}
+
+/// Triggers the dock's mop-washing cycle now.
+class TriggerMopWashCommand extends RobotCommand {
+  const TriggerMopWashCommand();
+}
+
+/// Triggers the dock's mop-drying (warm air) cycle now.
+class TriggerMopDryCommand extends RobotCommand {
+  const TriggerMopDryCommand();
+}
+
+/// Sets whether the dock collects dust automatically after each clean.
+class SetAutoDustCollectionCommand extends RobotCommand {
+  const SetAutoDustCollectionCommand(this.enabled);
+  final bool enabled;
+  @override
+  List<Object?> get props => [enabled];
+}
+
+/// Sets whether the dock washes the mop automatically.
+class SetAutoMopWashCommand extends RobotCommand {
+  const SetAutoMopWashCommand(this.enabled);
+  final bool enabled;
+  @override
+  List<Object?> get props => [enabled];
+}
+
+/// Sets whether the dock dries the mop automatically after washing.
+class SetAutoMopDryCommand extends RobotCommand {
+  const SetAutoMopDryCommand(this.enabled);
+  final bool enabled;
+  @override
+  List<Object?> get props => [enabled];
+}
+
+/// Resets a consumable's tracked life back to 100%, for after a physical
+/// replacement.
+class ResetConsumableLifeCommand extends RobotCommand {
+  const ResetConsumableLifeCommand(this.type);
+  final ConsumableType type;
+  @override
+  List<Object?> get props => [type];
+}
+
+/// Sets the robot's voice-prompt volume, 0-100.
+class SetVolumeCommand extends RobotCommand {
+  const SetVolumeCommand(this.percent);
+  final int percent;
+  @override
+  List<Object?> get props => [percent];
+}
+
+/// Requests the standard "clean the whole home" run using room-selection
+/// mode rather than the default smart-clean mode. This device's `mode` DP
+/// does support a `select_room` value, but exposes no DP to specify which
+/// rooms — so this triggers the mode, not a per-room selection.
+class SelectRoomCleanCommand extends RobotCommand {
+  const SelectRoomCleanCommand();
+}

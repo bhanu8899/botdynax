@@ -14,6 +14,9 @@ class _FakeLocalStorageService implements LocalStorageService {
   bool _hasSeenOnboarding = false;
   String _themeModeName = 'system';
   bool _developerMode = false;
+  bool _dndEnabled = false;
+  int _dndStartMinutes = 22 * 60;
+  int _dndEndMinutes = 7 * 60;
 
   @override
   Future<void> init() async {}
@@ -40,6 +43,41 @@ class _FakeLocalStorageService implements LocalStorageService {
   @override
   Future<void> setDeveloperMode(bool value) async {
     _developerMode = value;
+  }
+
+  @override
+  bool get dndEnabled => _dndEnabled;
+
+  @override
+  Future<void> setDndEnabled(bool value) async {
+    _dndEnabled = value;
+  }
+
+  @override
+  int get dndStartMinutes => _dndStartMinutes;
+
+  @override
+  Future<void> setDndStartMinutes(int value) async {
+    _dndStartMinutes = value;
+  }
+
+  @override
+  int get dndEndMinutes => _dndEndMinutes;
+
+  @override
+  Future<void> setDndEndMinutes(int value) async {
+    _dndEndMinutes = value;
+  }
+
+  @override
+  bool get isWithinDndWindow {
+    if (!_dndEnabled) return false;
+    final DateTime now = DateTime.now();
+    final int nowMinutes = now.hour * 60 + now.minute;
+    if (_dndStartMinutes <= _dndEndMinutes) {
+      return nowMinutes >= _dndStartMinutes && nowMinutes < _dndEndMinutes;
+    }
+    return nowMinutes >= _dndStartMinutes || nowMinutes < _dndEndMinutes;
   }
 }
 

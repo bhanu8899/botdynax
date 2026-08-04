@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/routing/app_routes.dart';
+import '../../core/storage/local_storage_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/animated_progress_ring.dart';
@@ -49,6 +50,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   void _showEventBanner(RobotEvent event) {
+    // Errors always surface — Do Not Disturb suppresses routine
+    // notifications, not the robot being stuck or broken.
+    final bool isError = event is RobotErrorEvent;
+    if (!isError && ref.read(localStorageServiceProvider).isWithinDndWindow) return;
+
     final String message = switch (event) {
       CleaningStartedEvent() => 'Cleaning started',
       CleaningCompletedEvent(:final areaCleanedSqm, :final duration) =>

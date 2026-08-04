@@ -6,11 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_spacing.dart';
 import '../../domain/entities/robot_enums.dart';
 import '../../domain/entities/robot_status.dart';
 import '../providers/auth_providers.dart';
 import '../providers/cloud_providers.dart';
 import '../providers/robot_providers.dart';
+import 'widgets/bottom_control_panel.dart';
 
 /// Renders the robot's map plus its live traveled path, pulled from Tuya's
 /// Sweeping Robot Open Service (`GET /tuya/robots/:robotId/map`, proxied by
@@ -57,7 +59,31 @@ class TuyaMapScreen extends ConsumerWidget {
           if (robotId == null) {
             return const Center(child: Text('Connect a robot first.'));
           }
-          return _MapBody(robotId: robotId);
+          return Stack(
+            children: [
+              _MapBody(robotId: robotId),
+              Positioned(
+                left: AppSpacing.md,
+                right: AppSpacing.md,
+                bottom: AppSpacing.md,
+                child: Consumer(
+                  builder: (BuildContext context, WidgetRef ref, Widget? _) {
+                    final RobotStatus? status = ref.watch(robotStatusProvider).valueOrNull;
+                    if (status == null) return const SizedBox.shrink();
+                    return BottomControlPanel(
+                      status: status,
+                      controller: ref.read(robotControllerProvider),
+                      // This device's map is a point-cloud snapshot, not
+                      // vector room polygons — there's no room-tap
+                      // selection to feed in here, so Room always falls
+                      // back to triggering `select_room` mode.
+                      selectedRoomId: null,
+                    );
+                  },
+                ),
+              ),
+            ],
+          );
         },
       ),
     );
@@ -75,6 +101,7 @@ class _MapBody extends ConsumerStatefulWidget {
 
 class _MapBodyState extends ConsumerState<_MapBody> {
   Timer? _refreshTimer;
+  final TransformationController _transformController = TransformationController();
 
   /// Tuya publishes a fresh map snapshot periodically while the robot is
   /// cleaning (the trajectory grows between snapshots), so re-fetching on
@@ -100,7 +127,36 @@ class _MapBodyState extends ConsumerState<_MapBody> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _transformController.dispose();
     super.dispose();
+  }
+
+  void _resetView() => _transformController.value = Matrix4.identity();
+
+  /// Centers the view on the robot's last known position. Since the map
+  /// widget's own size isn't known here, this reuses the same grid→canvas
+  /// projection [TuyaMapPainter] uses, then offsets the current zoom level
+  /// so that point lands in the middle of the viewport.
+  void _centerOnRobot(RobotPath path, Map<String, dynamic> mapData, Size viewportSize) {
+    final Offset? position = path.position;
+    if (position == null) return;
+    final List<dynamic> sizeArr = mapData['size'] as List<dynamic>;
+    final int gridW = sizeArr[0] as int;
+    final int gridH = sizeArr[1] as int;
+    if (gridW == 0 || gridH == 0) return;
+
+    final double scale = (viewportSize.width / gridW < viewportSize.height / gridH)
+        ? viewportSize.width / gridW
+        : viewportSize.height / gridH;
+    final double offsetX = (viewportSize.width - gridW * scale) / 2;
+    final double offsetY = (viewportSize.height - gridH * scale) / 2;
+    final Offset robotCanvasPos = Offset(offsetX + position.dx * scale, offsetY + position.dy * scale);
+
+    const double zoom = 2.5;
+    final Offset target = viewportSize.center(Offset.zero) - robotCanvasPos * zoom;
+    _transformController.value = Matrix4.identity()
+      ..translateByDouble(target.dx, target.dy, 0, 1)
+      ..scaleByDouble(zoom, zoom, zoom, 1);
   }
 
   @override
@@ -136,7 +192,10 @@ class _MapBodyState extends ConsumerState<_MapBody> {
         final bool isCleaning = status?.activity == ActivityState.cleaning;
 
         return Padding(
-          padding: const EdgeInsets.all(16),
+          // Extra bottom padding so the floating BottomControlPanel
+          // (added by TuyaMapScreen, overlaid via Stack) doesn't cover
+          // the legend text under the map.
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 190),
           child: Column(
             children: [
               Expanded(
@@ -147,12 +206,49 @@ class _MapBodyState extends ConsumerState<_MapBody> {
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(16),
-                    child: InteractiveViewer(
-                      maxScale: 5,
-                      child: CustomPaint(
-                        painter: TuyaMapPainter(mapData: mapData, path: path),
-                        child: const SizedBox.expand(),
-                      ),
+                    child: LayoutBuilder(
+                      builder: (BuildContext context, BoxConstraints constraints) {
+                        return Stack(
+                          children: [
+                            InteractiveViewer(
+                              transformationController: _transformController,
+                              maxScale: 5,
+                              child: CustomPaint(
+                                painter: TuyaMapPainter(mapData: mapData, path: path),
+                                child: SizedBox(
+                                  width: constraints.maxWidth,
+                                  height: constraints.maxHeight,
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              right: 10,
+                              bottom: 10,
+                              child: Column(
+                                children: [
+                                  _MapToolButton(
+                                    icon: Icons.my_location_rounded,
+                                    tooltip: 'Center on robot',
+                                    onPressed: path.position == null
+                                        ? null
+                                        : () => _centerOnRobot(
+                                              path,
+                                              mapData,
+                                              Size(constraints.maxWidth, constraints.maxHeight),
+                                            ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  _MapToolButton(
+                                    icon: Icons.crop_free_rounded,
+                                    tooltip: 'Reset view',
+                                    onPressed: _resetView,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ),
                 ),
@@ -163,6 +259,38 @@ class _MapBodyState extends ConsumerState<_MapBody> {
           ),
         );
       },
+    );
+  }
+}
+
+class _MapToolButton extends StatelessWidget {
+  const _MapToolButton({required this.icon, required this.tooltip, required this.onPressed});
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: const Color(0xCC12161D),
+        shape: const CircleBorder(side: BorderSide(color: Color(0x26FFFFFF))),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onPressed,
+          child: SizedBox(
+            width: 40,
+            height: 40,
+            child: Icon(
+              icon,
+              size: 20,
+              color: onPressed == null ? Colors.white24 : Colors.white,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

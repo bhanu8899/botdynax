@@ -142,4 +142,31 @@ class RobotController {
   Future<void> factoryReset() => _repository.sendCommand(const FactoryResetCommand());
 
   Future<void> restart() => _repository.sendCommand(const RestartRobotCommand());
+
+  Future<void> setCleaningType(CleaningType type) =>
+      _repository.sendCommand(SetCleaningTypeCommand(type));
+
+  Future<void> setCleaningPasses(int passes) =>
+      _repository.sendCommand(SetCleaningPassesCommand(passes));
+
+  Future<void> setCarpetPreference(CarpetPreference preference) =>
+      _repository.sendCommand(SetCarpetPreferenceCommand(preference));
+
+  Future<void> triggerDustCollection() => _repository.sendCommand(const TriggerDustCollectionCommand());
+
+  Future<void> triggerMopWash() => _repository.sendCommand(const TriggerMopWashCommand());
+
+  Future<void> triggerMopDry() => _repository.sendCommand(const TriggerMopDryCommand());
+
+  Future<void> setAutoDustCollection(bool enabled) =>
+      _repository.sendCommand(SetAutoDustCollectionCommand(enabled));
+
+  Future<void> setAutoMopDry(bool enabled) => _repository.sendCommand(SetAutoMopDryCommand(enabled));
+
+  Future<void> resetConsumableLife(ConsumableType type) =>
+      _repository.sendCommand(ResetConsumableLifeCommand(type));
+
+  Future<void> selectRoomClean() => _repository.sendCommand(const SelectRoomCleanCommand());
+
+  Future<void> setVolume(int percent) => _repository.sendCommand(SetVolumeCommand(percent));
 }

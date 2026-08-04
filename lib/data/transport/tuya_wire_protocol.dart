@@ -54,6 +54,15 @@ abstract final class TuyaDpCodes {
   static const String mopState = 'mop_state'; // enum: none | installed
   static const String waterOutput = 'water_output'; // enum: closed | low | middle | high
   static const String sweepMopMode = 'sweep_mop_mode'; // enum: only_sweep|only_mop|both_work|clean_before_mop
+  static const String cleanTimes = 'clean_times'; // integer 1-2, passes per room
+  static const String carpetCleanPrefer = 'carpet_clean_prefer'; // enum: adaptive | evade | ignore
+
+  // Dock/station routines — all confirmed in the v2.0 model.
+  static const String manualDustCollection = 'manual_dust_collection'; // bool, trigger now
+  static const String autoDustCollection = 'auto_dust_collection'; // bool, toggle
+  static const String wash = 'wash'; // bool, trigger mop-wash now
+  static const String manualAir = 'manual_air'; // bool, trigger drying now
+  static const String autoAir = 'auto_air'; // bool, toggle
 
   /// Raw fault bitmap. Per the device model: hex, one byte per active
   /// fault (e.g. `0102041E` = faults 1, 2, 4 and 30 at once); `00` means
@@ -92,6 +101,11 @@ class TuyaFault {
     // pad presence has to come from this fault code, not that DP.
     21: 'Mop pads removed',
 
+    // Observed during the dock's mop-washing routine — a normal automatic
+    // step, not something wrong. Listed in _informationalFaults below so
+    // it never raises the "needs attention" banner.
+    22: 'Mop washing in progress',
+
     // Clean water tank out -> 0x18; reinserting cleared it to 0x00.
     24: 'Clean water tank removed',
 
@@ -100,11 +114,19 @@ class TuyaFault {
     25: 'Sewage tank removed',
   };
 
+  /// Codes that are normal automatic dock routine, not a problem — don't
+  /// raise the "needs attention" banner for these.
+  static const Set<int> _informationalCodes = <int>{22};
+
   String get description => _confirmedFaults[code] ?? 'Robot fault (code $code)';
 
   /// Whether this code has a confirmed human-readable meaning, as opposed
   /// to being surfaced as a bare number.
   bool get isIdentified => _confirmedFaults.containsKey(code);
+
+  /// Whether this should surface as an actionable error the user needs to
+  /// address, as opposed to routine status.
+  bool get needsAttention => !_informationalCodes.contains(code);
 
   @override
   bool operator ==(Object other) => other is TuyaFault && other.code == code;
@@ -182,6 +204,59 @@ abstract final class TuyaWireProtocol {
       SetWaterLevelCommand(:final level) => [
           [TuyaCommand(TuyaDpCodes.waterOutput, _encodeWaterOutput(level))],
         ],
+      SetCleaningTypeCommand(:final type) => [
+          [TuyaCommand(TuyaDpCodes.sweepMopMode, _encodeCleaningType(type))],
+        ],
+      SetCleaningPassesCommand(:final passes) => [
+          [TuyaCommand(TuyaDpCodes.cleanTimes, passes.clamp(1, 2))],
+        ],
+      SetCarpetPreferenceCommand(:final preference) => [
+          [TuyaCommand(TuyaDpCodes.carpetCleanPrefer, _encodeCarpetPreference(preference))],
+        ],
+      TriggerDustCollectionCommand() => [
+          [const TuyaCommand(TuyaDpCodes.manualDustCollection, true)],
+        ],
+      TriggerMopWashCommand() => [
+          [const TuyaCommand(TuyaDpCodes.wash, true)],
+        ],
+      TriggerMopDryCommand() => [
+          [const TuyaCommand(TuyaDpCodes.manualAir, true)],
+        ],
+      SetAutoDustCollectionCommand(:final enabled) => [
+          [TuyaCommand(TuyaDpCodes.autoDustCollection, enabled)],
+        ],
+      SetAutoMopDryCommand(:final enabled) => [
+          [TuyaCommand(TuyaDpCodes.autoAir, enabled)],
+        ],
+      // No auto-wash toggle DP exists on this device — only the manual
+      // trigger (`wash`) is exposed, unlike dust collection and drying
+      // which both have a matching auto/manual pair.
+      SetAutoMopWashCommand() => const [],
+      ResetConsumableLifeCommand(:final type) => switch (type) {
+          ConsumableType.mainBrush => [
+              [const TuyaCommand(TuyaDpCodes.rollBrushLife, 0)],
+            ],
+          ConsumableType.sideBrush => [
+              [const TuyaCommand(TuyaDpCodes.edgeBrushLife, 0)],
+            ],
+          ConsumableType.filter => [
+              [const TuyaCommand(TuyaDpCodes.filterLife, 0)],
+            ],
+          ConsumableType.mopPad => [
+              [const TuyaCommand(TuyaDpCodes.mopLife, 0)],
+            ],
+          // No battery/sensor life DP on this device.
+          ConsumableType.battery || ConsumableType.sensor => const [],
+        },
+      SetVolumeCommand(:final percent) => [
+          [TuyaCommand(TuyaDpCodes.volumeSet, percent.clamp(0, 100))],
+        ],
+      // `mode: select_room` is a real value on this device, but there is no
+      // DP to specify which rooms — this triggers the mode only.
+      SelectRoomCleanCommand() => [
+          [const TuyaCommand(TuyaDpCodes.mode, 'select_room')],
+          [const TuyaCommand(TuyaDpCodes.powerGoV1, true)],
+        ],
       // No child-lock DP, and manual motor/pump/LED/room-naming controls
       // aren't part of this device's schema at all.
       SetChildLockCommand() ||
@@ -249,6 +324,18 @@ abstract final class TuyaWireProtocol {
           isMopAttached = value == 'installed';
         case TuyaDpCodes.totalError:
           faults = decodeTotalError(value as String?);
+        case TuyaDpCodes.sweepMopMode:
+          status = status.copyWith(cleaningType: _decodeCleaningType(value! as String));
+        case TuyaDpCodes.cleanTimes:
+          status = status.copyWith(cleaningPasses: value! as int);
+        case TuyaDpCodes.carpetCleanPrefer:
+          status = status.copyWith(carpetPreference: _decodeCarpetPreference(value! as String));
+        case TuyaDpCodes.autoDustCollection:
+          status = status.copyWith(autoDustCollection: value! as bool);
+        case TuyaDpCodes.autoAir:
+          status = status.copyWith(autoMopDry: value! as bool);
+        case TuyaDpCodes.volumeSet:
+          status = status.copyWith(voiceVolume: value! as int);
         case TuyaDpCodes.switchGo:
         case TuyaDpCodes.powerGoV1:
           powerGo = value! as bool;
@@ -274,12 +361,16 @@ abstract final class TuyaWireProtocol {
 
     // `total_error` is the authoritative fault source — it carries the
     // actual fault numbers. `status: "fault"` only says *that* something
-    // is wrong, so it's the fallback when the bitmap isn't present.
-    final bool hasFault = faults.isNotEmpty || resolvedActivity == ActivityState.error;
+    // is wrong, so it's the fallback when the bitmap isn't present. Codes
+    // like 22 (mop washing) are normal dock routine, not a problem, so
+    // they're excluded from what raises the "needs attention" banner even
+    // though they still show up in faultCodes/faultMessages.
+    final bool hasActionableFault = faults.any((TuyaFault f) => f.needsAttention) ||
+        (faults.isEmpty && resolvedActivity == ActivityState.error);
     status = status.copyWith(
       faultCodes: faults.map((TuyaFault f) => f.code).toList(),
       faultMessages: faults.map((TuyaFault f) => f.description).toList(),
-      activeErrors: hasFault ? const [RobotErrorCode.needsAttention] : const [],
+      activeErrors: hasActionableFault ? const [RobotErrorCode.needsAttention] : const [],
     );
 
     if (resolvedActivity != null) {
@@ -338,30 +429,38 @@ abstract final class TuyaWireProtocol {
 
   /// Maps the read-only `status` DP to an activity state.
   ///
-  /// Two sources, both real: the values Tuya *declares* for this product
-  /// via `GET /v1.1/devices/{id}/specifications`, and the values the robot
-  /// has actually *reported* in its device event logs. Those sets differ —
-  /// this firmware emits `relocation`, `washing`, `airing`,
-  /// `relocation_recharge`, `collecting_dust`, `smart` and `fault`, none of
-  /// which appear in its declared enum. Both are handled here; anything
-  /// still unrecognized falls back to whatever
-  /// `power_go`/`pause`/`switch_charge` resolved rather than guessing.
+  /// The full 28-value range comes from the device's own v2.0 thing-model
+  /// enum declaration — richer than what was previously derived only from
+  /// v1.x's declared spec plus observed event logs. Unrecognized values
+  /// fall back to whatever `power_go`/`pause`/`switch_charge` resolved
+  /// rather than guessing.
   static ActivityState? _decodeStatusString(String value) => switch (value) {
-        // Actively cleaning. `smart`/`zone`/`pose` mirror the active mode;
-        // `relocation` is the robot re-localising mid-run, still underway.
+        // Actively cleaning. `smart`/`zone`/`pose`/`select_room` mirror the
+        // active mode; `relocation`/`goto_pos`/`mapping` are the robot
+        // moving/re-localising mid-run, still underway.
         'smart' ||
         'zone' ||
         'pose' ||
+        'select_room' ||
         'cleaning' ||
         'zone_clean' ||
         'part_clean' ||
         'goto_pos' ||
-        'relocation' =>
+        'pos_arrived' ||
+        'relocation' ||
+        'mapping' ||
+        'mapping_done' ||
+        'manual_control' ||
+        'quick_mapping' =>
           ActivityState.cleaning,
 
-        'paused' || 'pos_unarrive' => ActivityState.paused,
+        'paused' || 'pos_unarrive' || 'paused_backtowashmop' => ActivityState.paused,
 
-        'goto_charge' || 'relocation_recharge' => ActivityState.returningToDock,
+        'goto_charge' ||
+        'relocation_recharge' ||
+        'backtowashmop' ||
+        'breakpoint_charging' =>
+          ActivityState.returningToDock,
 
         'charging' => ActivityState.charging,
 
@@ -374,7 +473,8 @@ abstract final class TuyaWireProtocol {
         'washing' ||
         'airing' ||
         'collecting_dust' ||
-        'pos_arrived' =>
+        'seek_dust_bucket' ||
+        'breakpoint_washing' =>
           ActivityState.docked,
 
         'standby' => ActivityState.idle,
@@ -430,13 +530,16 @@ abstract final class TuyaWireProtocol {
         WaterFlow.high || WaterFlow.ultra => 'high',
       };
 
+  /// The v2.0 model exposes 4 usable levels (`closed` is "off", not a
+  /// cleaning preference, so it's never sent from a power selector):
+  /// gentle | normal | strong | max.
   static String _encodeSuction(VacuumPower power) => switch (power) {
         VacuumPower.silent => 'gentle',
         VacuumPower.eco => 'gentle',
         VacuumPower.standard => 'normal',
         VacuumPower.strong => 'strong',
-        VacuumPower.turbo => 'strong',
-        VacuumPower.maximum => 'strong',
+        VacuumPower.turbo => 'max',
+        VacuumPower.maximum => 'max',
         VacuumPower.custom => 'normal',
       };
 
@@ -444,7 +547,36 @@ abstract final class TuyaWireProtocol {
         'gentle' => VacuumPower.eco,
         'normal' => VacuumPower.standard,
         'strong' => VacuumPower.strong,
+        'max' => VacuumPower.maximum,
         _ => VacuumPower.standard,
+      };
+
+  static String _encodeCleaningType(CleaningType type) => switch (type) {
+        CleaningType.vacuum => 'only_sweep',
+        CleaningType.mop => 'only_mop',
+        CleaningType.vacuumAndMop => 'both_work',
+        CleaningType.mopAfterVacuum => 'clean_before_mop',
+      };
+
+  static CleaningType _decodeCleaningType(String value) => switch (value) {
+        'only_sweep' => CleaningType.vacuum,
+        'only_mop' => CleaningType.mop,
+        'both_work' => CleaningType.vacuumAndMop,
+        'clean_before_mop' => CleaningType.mopAfterVacuum,
+        _ => CleaningType.vacuumAndMop,
+      };
+
+  static String _encodeCarpetPreference(CarpetPreference preference) => switch (preference) {
+        CarpetPreference.adaptive => 'adaptive',
+        CarpetPreference.avoid => 'evade',
+        CarpetPreference.ignore => 'ignore',
+      };
+
+  static CarpetPreference _decodeCarpetPreference(String value) => switch (value) {
+        'adaptive' => CarpetPreference.adaptive,
+        'evade' => CarpetPreference.avoid,
+        'ignore' => CarpetPreference.ignore,
+        _ => CarpetPreference.adaptive,
       };
 
   /// `direction_control` has no reverse option on this device — a negative

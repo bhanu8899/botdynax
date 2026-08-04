@@ -26,6 +26,12 @@ enum MopPattern { yPattern, sPattern, crossPattern }
 /// The cleaning strategy requested for the current run.
 enum CleaningMode { auto, room, zone, spot, custom }
 
+/// Vacuum-only / mop-only / both / mop after vacuum.
+enum CleaningType { vacuum, mop, vacuumAndMop, mopAfterVacuum }
+
+/// How the robot treats carpet.
+enum CarpetPreference { adaptive, avoid, ignore }
+
 /// Consumable/accessory kind tracked for replacement reminders.
 enum ConsumableType { mainBrush, sideBrush, filter, mopPad, battery, sensor }
 
