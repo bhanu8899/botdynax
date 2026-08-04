@@ -264,6 +264,16 @@ class _DashboardView extends ConsumerWidget {
               icon: Icons.build_circle_outlined,
               onTap: () => context.push(AppRoutes.accessories),
             ),
+            _HubTile(
+              label: 'Diagnostics',
+              icon: Icons.monitor_heart_outlined,
+              onTap: () => context.push(AppRoutes.diagnostics),
+            ),
+            _HubTile(
+              label: 'Settings',
+              icon: Icons.settings_outlined,
+              onTap: () => context.push(AppRoutes.settings),
+            ),
           ],
         ),
         const SizedBox(height: AppSpacing.md),

@@ -6,6 +6,7 @@ import '../../presentation/accessories/accessories_screen.dart';
 import '../../presentation/auth/forgot_password_screen.dart';
 import '../../presentation/auth/login_screen.dart';
 import '../../presentation/auth/register_screen.dart';
+import '../../presentation/diagnostics/diagnostics_screen.dart';
 import '../../presentation/history/history_screen.dart';
 import '../../presentation/home/home_screen.dart';
 import '../../presentation/map/tuya_map_screen.dart';
@@ -90,6 +91,11 @@ final Provider<GoRouter> goRouterProvider = Provider<GoRouter>((Ref ref) {
         path: AppRoutes.tuyaLink,
         name: 'tuyaLink',
         builder: (BuildContext context, GoRouterState state) => const TuyaLinkScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.diagnostics,
+        name: 'diagnostics',
+        builder: (BuildContext context, GoRouterState state) => const DiagnosticsScreen(),
       ),
       GoRoute(
         path: AppRoutes.map,

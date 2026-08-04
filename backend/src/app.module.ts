@@ -5,6 +5,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import { AccessoriesModule } from './accessories/accessories.module';
 import { AppController } from './app.controller';
+import { DiagnosticsController } from './diagnostics/diagnostics.controller';
 import configuration from './config/configuration';
 import { HistoryModule } from './history/history.module';
 import { MqttModule } from './mqtt/mqtt.module';
@@ -31,7 +32,7 @@ import { UsersModule } from './users/users.module';
     NotificationsModule,
     TuyaModule,
   ],
-  controllers: [AppController],
+  controllers: [AppController, DiagnosticsController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}
