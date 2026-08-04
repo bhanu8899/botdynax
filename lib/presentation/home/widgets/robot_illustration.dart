@@ -533,51 +533,39 @@ class _RobotScenePainter extends CustomPainter {
         ..color = (binIntensity > 0.01 ? AppColors.danger : params.glowColor).withValues(alpha: 0.7),
     );
 
-    // Side brush arcs — spin scales with brushSpin (0 while docked/paused).
-    final Paint brushPaint = Paint()
+    // Rotating mop pads — the pair of spinning discs under the robot. This
+    // is the element that reads as "the mops" at a glance, so the mop-pads
+    // -removed fault highlights these directly (red, still spinning) rather
+    // than a separate static icon elsewhere on the body.
+    final double mopIntensity = _intensity(_FaultZone.mopPads);
+    final Paint mopPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = radius * 0.05
       ..strokeCap = StrokeCap.round
-      ..color = AppColors.neonViolet.withValues(alpha: 0.4 + 0.4 * params.brushSpin);
+      ..color = Color.lerp(
+        AppColors.neonViolet.withValues(alpha: 0.4 + 0.4 * params.brushSpin),
+        AppColors.danger,
+        mopIntensity * blink,
+      )!;
 
-    final double brushSpinAngle = phaseAngle * 3 * params.brushSpin;
+    final double mopSpinAngle = phaseAngle * 3 * params.brushSpin;
     for (final double sign in [-1.0, 1.0]) {
-      final Offset brushCenter = center + Offset(sign * radius * 0.78, radius * 0.55);
-      canvas.drawArc(
-        Rect.fromCircle(center: brushCenter, radius: radius * 0.22),
-        brushSpinAngle,
-        4.6,
-        false,
-        brushPaint,
-      );
-    }
-
-    // Mop pads — two pads peeking out from beneath the front of the body.
-    final double mopIntensity = _intensity(_FaultZone.mopPads);
-    for (final double sign in [-1.0, 1.0]) {
-      final Offset padCenter = center + Offset(sign * radius * 0.32, radius * 0.86);
-      final RRect padRRect = RRect.fromRectAndRadius(
-        Rect.fromCenter(center: padCenter, width: radius * 0.34, height: radius * 0.2),
-        Radius.circular(radius * 0.08),
-      );
+      final Offset mopCenter = center + Offset(sign * radius * 0.78, radius * 0.55);
       if (mopIntensity > 0.01) {
-        canvas.drawRRect(
-          padRRect.inflate(2.5),
+        canvas.drawCircle(
+          mopCenter,
+          radius * 0.28,
           Paint()
-            ..color = AppColors.danger.withValues(alpha: 0.5 * mopIntensity * blink)
+            ..color = AppColors.danger.withValues(alpha: 0.4 * mopIntensity * blink)
             ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
         );
       }
-      canvas.drawRRect(
-        padRRect,
-        Paint()..color = Color.lerp(const Color(0xFF3D4557), AppColors.danger, mopIntensity * blink)!,
-      );
-      canvas.drawRRect(
-        padRRect,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = radius * 0.015
-          ..color = (mopIntensity > 0.01 ? AppColors.danger : Colors.white).withValues(alpha: 0.5),
+      canvas.drawArc(
+        Rect.fromCircle(center: mopCenter, radius: radius * 0.22),
+        mopSpinAngle,
+        4.6,
+        false,
+        mopPaint,
       );
     }
 

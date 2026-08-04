@@ -164,7 +164,7 @@ abstract final class TuyaWireProtocol {
     return switch (command) {
       StartCleaningCommand(:final mode) => [
           [TuyaCommand(TuyaDpCodes.mode, _encodeCleaningMode(mode))],
-          [const TuyaCommand(TuyaDpCodes.powerGoV1, true)],
+          [const TuyaCommand(TuyaDpCodes.switchGo, true)],
         ],
       ResumeCleaningCommand() => [
           [const TuyaCommand(TuyaDpCodes.pause, false)],
@@ -173,30 +173,30 @@ abstract final class TuyaWireProtocol {
           [const TuyaCommand(TuyaDpCodes.pause, true)],
         ],
       StopCleaningCommand() => [
-          [const TuyaCommand(TuyaDpCodes.powerGoV1, false)],
+          [const TuyaCommand(TuyaDpCodes.switchGo, false)],
         ],
       ReturnToDockCommand() => [
           [const TuyaCommand(TuyaDpCodes.switchCharge, true)],
         ],
       SpotCleanCommand() => [
           [const TuyaCommand(TuyaDpCodes.mode, 'pose')],
-          [const TuyaCommand(TuyaDpCodes.powerGoV1, true)],
+          [const TuyaCommand(TuyaDpCodes.switchGo, true)],
         ],
       // This device's `mode` enum (smart/zone/pose) has no per-room
       // selection — room picking is app/map-side only, so this falls back
       // to a full smart clean.
       RoomCleanCommand() => [
           [const TuyaCommand(TuyaDpCodes.mode, 'smart')],
-          [const TuyaCommand(TuyaDpCodes.powerGoV1, true)],
+          [const TuyaCommand(TuyaDpCodes.switchGo, true)],
         ],
       ZoneCleanCommand() => [
           [const TuyaCommand(TuyaDpCodes.mode, 'zone')],
-          [const TuyaCommand(TuyaDpCodes.powerGoV1, true)],
+          [const TuyaCommand(TuyaDpCodes.switchGo, true)],
         ],
       CustomCleanCommand(:final power, :final waterFlow) => [
           [TuyaCommand(TuyaDpCodes.suction, _encodeSuction(power))],
           [TuyaCommand(TuyaDpCodes.waterOutput, _encodeWaterOutput(waterFlow))],
-          [const TuyaCommand(TuyaDpCodes.powerGoV1, true)],
+          [const TuyaCommand(TuyaDpCodes.switchGo, true)],
         ],
       SetVacuumPowerCommand(:final power) => [
           [TuyaCommand(TuyaDpCodes.suction, _encodeSuction(power))],
@@ -266,7 +266,7 @@ abstract final class TuyaWireProtocol {
       // DP to specify which rooms — this triggers the mode only.
       SelectRoomCleanCommand() => [
           [const TuyaCommand(TuyaDpCodes.mode, 'select_room')],
-          [const TuyaCommand(TuyaDpCodes.powerGoV1, true)],
+          [const TuyaCommand(TuyaDpCodes.switchGo, true)],
         ],
       // No child-lock DP, and manual motor/pump/LED/room-naming controls
       // aren't part of this device's schema at all.
