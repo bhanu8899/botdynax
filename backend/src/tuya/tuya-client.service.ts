@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
 
-import { signTuyaRequest } from './tuya-signature.util';
+import { canonicalizeTuyaPath, signTuyaRequest } from './tuya-signature.util';
 
 interface TuyaTokenResponse {
   access_token: string;
@@ -88,7 +88,8 @@ export class TuyaClientService {
 
     const response = await this.http.request<TuyaApiResponse<T>>({
       method: params.method,
-      url: params.path,
+      // Must match the canonical (sorted-query) form that was signed.
+      url: canonicalizeTuyaPath(params.path),
       data: bodyString,
       headers: { ...headers, 'Content-Type': 'application/json' },
     });

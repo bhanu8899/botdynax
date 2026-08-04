@@ -236,7 +236,12 @@ class _DashboardView extends ConsumerWidget {
           physics: const NeverScrollableScrollPhysics(),
           mainAxisSpacing: AppSpacing.sm,
           crossAxisSpacing: AppSpacing.sm,
-          childAspectRatio: 2.4,
+          // A fixed aspect ratio can't grow when the user's text scale
+          // pushes tile content taller than the slot, which overflows by a
+          // few pixels. Shrinking the ratio as text scales keeps the tiles
+          // proportional at default size but lets them get taller when
+          // accessibility text settings demand it.
+          childAspectRatio: 2.4 / MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.6),
           children: [
             _HubTile(
               label: 'Live Map',
@@ -373,7 +378,14 @@ class _HubTile extends StatelessWidget {
         children: [
           heroTag != null ? Hero(tag: heroTag!, child: iconWidget) : iconWidget,
           const SizedBox(width: AppSpacing.sm),
-          Expanded(child: Text(label, style: Theme.of(context).textTheme.titleSmall)),
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.titleSmall,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
     );

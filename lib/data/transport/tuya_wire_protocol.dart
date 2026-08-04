@@ -170,6 +170,11 @@ abstract final class TuyaWireProtocol {
       status = status.copyWith(
         activity: resolvedActivity,
         isCharging: resolvedActivity == ActivityState.charging || resolvedActivity == ActivityState.docked,
+        // This device reports faults only as a bare `status: "fault"` with
+        // no accompanying fault code, so the specific cause genuinely
+        // isn't knowable from the API — surface it as `unknown` rather
+        // than inventing a more specific-sounding reason.
+        activeErrors: resolvedActivity == ActivityState.error ? const [RobotErrorCode.unknown] : const [],
       );
     }
 
@@ -220,19 +225,54 @@ abstract final class TuyaWireProtocol {
     return null;
   }
 
-  /// `status` is a read-only Tuya enum whose full value range wasn't
-  /// enumerable from a single diagnostic snapshot. Confirmed live so far:
-  /// "airing", "goto_charge", and "smart" (mirrors the active `mode` value
-  /// while cleaning). Unrecognized values fall back to whatever
-  /// `power_go`/`pause`/`switch_charge` already resolved rather than
-  /// guessing; extend this map as more values surface.
+  /// Maps the read-only `status` DP to an activity state.
+  ///
+  /// Two sources, both real: the values Tuya *declares* for this product
+  /// via `GET /v1.1/devices/{id}/specifications`, and the values the robot
+  /// has actually *reported* in its device event logs. Those sets differ —
+  /// this firmware emits `relocation`, `washing`, `airing`,
+  /// `relocation_recharge`, `collecting_dust`, `smart` and `fault`, none of
+  /// which appear in its declared enum. Both are handled here; anything
+  /// still unrecognized falls back to whatever
+  /// `power_go`/`pause`/`switch_charge` resolved rather than guessing.
   static ActivityState? _decodeStatusString(String value) => switch (value) {
-        'goto_charge' => ActivityState.returningToDock,
+        // Actively cleaning. `smart`/`zone`/`pose` mirror the active mode;
+        // `relocation` is the robot re-localising mid-run, still underway.
+        'smart' ||
+        'zone' ||
+        'pose' ||
+        'cleaning' ||
+        'zone_clean' ||
+        'part_clean' ||
+        'goto_pos' ||
+        'relocation' =>
+          ActivityState.cleaning,
+
+        'paused' || 'pos_unarrive' => ActivityState.paused,
+
+        'goto_charge' || 'relocation_recharge' => ActivityState.returningToDock,
+
         'charging' => ActivityState.charging,
-        'chargedone' || 'standby' || 'sleep' => ActivityState.docked,
-        'airing' => ActivityState.idle,
-        'smart' || 'zone' || 'pose' || 'cleaning' => ActivityState.cleaning,
-        'paused' => ActivityState.paused,
+
+        // Dock-side maintenance routines: the robot is seated on the dock
+        // throughout, so these read as docked rather than as a distinct
+        // activity the rest of the app has no concept of.
+        'charge_done' ||
+        'chargedone' ||
+        'sleep' ||
+        'washing' ||
+        'airing' ||
+        'collecting_dust' ||
+        'pos_arrived' =>
+          ActivityState.docked,
+
+        'standby' => ActivityState.idle,
+
+        // The only fault signal this device exposes — a bare `fault`, with
+        // no accompanying code identifying which fault it is (no fault DP
+        // exists in either the declared spec or 7 days of event logs).
+        'fault' => ActivityState.error,
+
         _ => null,
       };
 

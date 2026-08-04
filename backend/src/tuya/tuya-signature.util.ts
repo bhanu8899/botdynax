@@ -16,6 +16,33 @@ export interface TuyaSignedHeaders {
   access_token?: string;
 }
 
+/// Tuya requires query parameters sorted by key (ASCII) in the signed
+/// string, and the request must be sent against that same canonical form.
+/// Requests whose params happen to already be alphabetical sign correctly
+/// by luck; any other ordering fails with "sign invalid". Always route
+/// both the signature and the outgoing URL through this.
+export function canonicalizeTuyaPath(pathWithQuery: string): string {
+  const queryIndex = pathWithQuery.indexOf('?');
+  if (queryIndex === -1) return pathWithQuery;
+
+  const path = pathWithQuery.slice(0, queryIndex);
+  const query = pathWithQuery.slice(queryIndex + 1);
+  if (!query) return path;
+
+  const sorted = query
+    .split('&')
+    .filter((pair) => pair.length > 0)
+    .map((pair) => {
+      const eq = pair.indexOf('=');
+      return eq === -1 ? ([pair, ''] as const) : ([pair.slice(0, eq), pair.slice(eq + 1)] as const);
+    })
+    .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+    .map(([key, value]) => `${key}=${value}`)
+    .join('&');
+
+  return `${path}?${sorted}`;
+}
+
 export function signTuyaRequest(params: {
   clientId: string;
   clientSecret: string;
@@ -33,7 +60,12 @@ export function signTuyaRequest(params: {
     .digest('hex');
   const signedHeadersString = '';
 
-  const stringToSign = [method.toUpperCase(), contentHash, signedHeadersString, pathWithQuery].join('\n');
+  const stringToSign = [
+    method.toUpperCase(),
+    contentHash,
+    signedHeadersString,
+    canonicalizeTuyaPath(pathWithQuery),
+  ].join('\n');
 
   const signStr = `${clientId}${accessToken ?? ''}${t}${stringToSign}`;
   const sign = createHmac('sha256', clientSecret).update(signStr).digest('hex').toUpperCase();
