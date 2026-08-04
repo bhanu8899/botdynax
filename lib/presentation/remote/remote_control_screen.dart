@@ -8,112 +8,60 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/bd_buttons.dart';
 import '../../core/widgets/glass_card.dart';
 import '../providers/robot_providers.dart';
-import 'widgets/joystick_pad.dart';
 
-class RemoteControlScreen extends ConsumerStatefulWidget {
+/// Manual drive pad. Buttons map directly to the real `direction_control`
+/// DP (`forward | turn_left | turn_right | stop` — confirmed via the
+/// device's full v2.0 thing model, no reverse/backward value exists on
+/// this device, so no Backward button is offered here; faking one would
+/// silently do nothing when pressed). The LED, vacuum-motor, water-pump
+/// toggles and the drive-speed slider previously on this screen were
+/// removed for the same reason: none of those DPs exist on this device
+/// either (`direction_control` carries no speed/magnitude, and there is no
+/// `led`/motor/pump DP anywhere in the 37-DP model) — they were UI that
+/// silently did nothing when pressed.
+class RemoteControlScreen extends ConsumerWidget {
   const RemoteControlScreen({super.key});
 
-  @override
-  ConsumerState<RemoteControlScreen> createState() => _RemoteControlScreenState();
-}
+  RobotController _controller(WidgetRef ref) => ref.read(robotControllerProvider);
 
-class _RemoteControlScreenState extends ConsumerState<RemoteControlScreen> {
-  double _speed = 0.6;
-  bool _vacuumOn = false;
-  bool _waterOn = false;
-  bool _ledOn = false;
-
-  RobotController get _controller => ref.read(robotControllerProvider);
-
-  void _handleJoystick(double linear, double angular) {
-    unawaited(_controller.drive(linear: linear * _speed, angular: angular * _speed));
-  }
+  Future<void> _send(WidgetRef ref, {required double linear, required double angular}) =>
+      _controller(ref).drive(linear: linear, angular: angular);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final ThemeData theme = Theme.of(context);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Remote Control')),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.md),
+          padding: const EdgeInsets.all(AppSpacing.lg),
           child: Column(
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: _ToggleTile(
-                      label: 'Vacuum',
-                      icon: Icons.cyclone_rounded,
-                      value: _vacuumOn,
-                      onChanged: (bool value) {
-                        setState(() => _vacuumOn = value);
-                        unawaited(_controller.setVacuumMotor(value));
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: _ToggleTile(
-                      label: 'Water',
-                      icon: Icons.water_drop_outlined,
-                      value: _waterOn,
-                      onChanged: (bool value) {
-                        setState(() => _waterOn = value);
-                        unawaited(_controller.setWaterPump(value));
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: _ToggleTile(
-                      label: 'LED',
-                      icon: Icons.lightbulb_outline_rounded,
-                      value: _ledOn,
-                      onChanged: (bool value) {
-                        setState(() => _ledOn = value);
-                        unawaited(_controller.setLed(value));
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.xl),
-              Expanded(
-                child: Center(
-                  child: JoystickPad(onChanged: _handleJoystick),
-                ),
+              const Spacer(),
+              _DirectionPad(
+                onForward: () => unawaited(_send(ref, linear: 1, angular: 0)),
+                onTurnLeft: () => unawaited(_send(ref, linear: 0, angular: -1)),
+                onTurnRight: () => unawaited(_send(ref, linear: 0, angular: 1)),
+                onStop: () => unawaited(_send(ref, linear: 0, angular: 0)),
               ),
               const SizedBox(height: AppSpacing.md),
-              GlassCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.speed_rounded, size: 18, color: AppColors.neonCyan),
-                        const SizedBox(width: AppSpacing.xs),
-                        Text('Drive Speed', style: theme.textTheme.labelLarge),
-                        const Spacer(),
-                        Text('${(_speed * 100).round()}%', style: theme.textTheme.labelLarge),
-                      ],
-                    ),
-                    Slider(
-                      value: _speed,
-                      min: 0.2,
-                      max: 1.0,
-                      activeColor: AppColors.neonCyan,
-                      onChanged: (double value) => setState(() => _speed = value),
-                    ),
-                  ],
-                ),
+              Text(
+                'This robot has no reverse — only forward, turn, and stop.',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondaryDark),
               ),
-              const SizedBox(height: AppSpacing.md),
+              const Spacer(),
               BdSecondaryButton(
                 label: 'Return to Dock',
                 icon: Icons.home_rounded,
-                onPressed: () => unawaited(_controller.returnToDock()),
+                onPressed: () => unawaited(_controller(ref).returnToDock()),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              BdSecondaryButton(
+                label: 'Find Robot',
+                icon: Icons.campaign_rounded,
+                onPressed: () => unawaited(_controller(ref).findRobot()),
               ),
             ],
           ),
@@ -123,31 +71,72 @@ class _RemoteControlScreenState extends ConsumerState<RemoteControlScreen> {
   }
 }
 
-class _ToggleTile extends StatelessWidget {
-  const _ToggleTile({
-    required this.label,
-    required this.icon,
-    required this.value,
-    required this.onChanged,
+class _DirectionPad extends StatelessWidget {
+  const _DirectionPad({
+    required this.onForward,
+    required this.onTurnLeft,
+    required this.onTurnRight,
+    required this.onStop,
   });
 
-  final String label;
-  final IconData icon;
-  final bool value;
-  final ValueChanged<bool> onChanged;
+  final VoidCallback onForward;
+  final VoidCallback onTurnLeft;
+  final VoidCallback onTurnRight;
+  final VoidCallback onStop;
 
   @override
   Widget build(BuildContext context) {
+    const double buttonSize = 76;
     return GlassCard(
-      onTap: () => onChanged(!value),
-      glowColor: value ? AppColors.neonCyan : null,
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: value ? AppColors.neonCyan : null),
-          const SizedBox(height: AppSpacing.xxs),
-          Text(label, style: Theme.of(context).textTheme.labelMedium),
+          _PadButton(icon: Icons.keyboard_arrow_up_rounded, size: buttonSize, onPressed: onForward),
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _PadButton(icon: Icons.rotate_left_rounded, size: buttonSize, onPressed: onTurnLeft),
+              const SizedBox(width: AppSpacing.sm),
+              _PadButton(
+                icon: Icons.stop_rounded,
+                size: buttonSize,
+                color: AppColors.danger,
+                onPressed: onStop,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              _PadButton(icon: Icons.rotate_right_rounded, size: buttonSize, onPressed: onTurnRight),
+            ],
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _PadButton extends StatelessWidget {
+  const _PadButton({required this.icon, required this.size, required this.onPressed, this.color});
+
+  final IconData icon;
+  final double size;
+  final VoidCallback onPressed;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color tint = color ?? AppColors.neonCyan;
+    return Material(
+      color: tint.withValues(alpha: 0.12),
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onPressed,
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: Icon(icon, size: size * 0.5, color: tint),
+        ),
       ),
     );
   }

@@ -5,7 +5,6 @@ import 'package:botdynax/core/widgets/glass_card.dart';
 import 'package:botdynax/domain/entities/user.dart';
 import 'package:botdynax/domain/repositories/auth_repository.dart';
 import 'package:botdynax/presentation/providers/auth_providers.dart';
-import 'package:botdynax/presentation/remote/widgets/joystick_pad.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -182,18 +181,18 @@ void main() {
     expect(tester.takeException(), isNull);
 
     // Open Manual Control from the bottom control panel and exercise the
-    // joystick + toggles.
+    // direction pad.
     await tester.tap(find.text('Manual'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
     expect(find.text('Remote Control'), findsOneWidget);
 
-    await tester.drag(find.byType(JoystickPad), const Offset(0, -40));
+    await tester.tap(find.byIcon(Icons.keyboard_arrow_up_rounded));
     await tester.pump(const Duration(milliseconds: 100));
     expect(tester.takeException(), isNull);
 
-    await tester.tap(find.text('Vacuum'));
+    await tester.tap(find.byIcon(Icons.stop_rounded));
     await tester.pump(const Duration(milliseconds: 100));
     expect(tester.takeException(), isNull);
 

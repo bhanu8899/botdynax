@@ -5,23 +5,34 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../domain/entities/robot_enums.dart';
+import '../../../domain/entities/robot_status.dart';
 
-/// An original, abstract top-down rendering of a BotDyNax vacuum — not a
-/// photo or 3D scan of any real product, just a stylized disc with a
-/// sensor bump, side-brush arcs, and a brand-gradient glow. Every visual
-/// state below (cleaning motion, docking approach, charge pulse, error
-/// jitter) is driven purely by [activity] — the same [ActivityState] the
-/// rest of the app reads off the robot's real decoded Tuya status — never
-/// by literal position/telemetry we don't have for this device.
+/// An original, abstract top-down rendering of a BotDyNax vacuum and its
+/// dock — not a photo or 3D scan of any real product, just a stylized disc
+/// and base with brand-gradient glow. Every visual state below (cleaning
+/// motion, docking approach, charge pulse) is driven purely by
+/// [RobotStatus.activity] — the same [ActivityState] the rest of the app
+/// reads off the robot's real decoded Tuya status — never by literal
+/// position/telemetry we don't have for this device.
+///
+/// On top of that, five dock/robot sub-components highlight red
+/// independently of activity, each driven by one specific empirically
+/// confirmed `total_error` fault code (see [RobotStatus]'s
+/// `isDustBagMissing`/`isMopPadsRemoved`/`isCleanWaterTankMissing`/
+/// `isSewageTankMissing`/`isDustBinMissing` getters) — so a fault shows
+/// exactly where it physically is, and any combination can be active at
+/// once without affecting the rest of the illustration.
 class RobotIllustration extends StatefulWidget {
-  const RobotIllustration({required this.activity, super.key, this.size = 220});
+  const RobotIllustration({required this.status, super.key, this.size = 220});
 
-  final ActivityState activity;
+  final RobotStatus status;
   final double size;
 
   @override
   State<RobotIllustration> createState() => _RobotIllustrationState();
 }
+
+enum _FaultZone { dustBag, waterTank, sewageTank, mopPads, dustBin }
 
 class _RobotIllustrationState extends State<RobotIllustration> with TickerProviderStateMixin {
   late final AnimationController _loopController;
@@ -29,33 +40,62 @@ class _RobotIllustrationState extends State<RobotIllustration> with TickerProvid
   late _StateParams _fromParams;
   late _StateParams _toParams;
 
+  late final Map<_FaultZone, AnimationController> _faultControllers;
+
   @override
   void initState() {
     super.initState();
     _loopController = AnimationController(vsync: this, duration: const Duration(seconds: 3))..repeat();
-    _toParams = _StateParams.forActivity(widget.activity);
+    _toParams = _StateParams.forActivity(widget.status.activity);
     _fromParams = _toParams;
     _transitionController = AnimationController(vsync: this, duration: const Duration(milliseconds: 700))
       ..value = 1.0;
+
+    _faultControllers = {
+      for (final _FaultZone zone in _FaultZone.values)
+        zone: AnimationController(vsync: this, duration: const Duration(milliseconds: 350)),
+    };
+    for (final MapEntry<_FaultZone, bool> entry in _currentFaults(widget.status).entries) {
+      if (entry.value) _faultControllers[entry.key]!.value = 1.0;
+    }
   }
+
+  Map<_FaultZone, bool> _currentFaults(RobotStatus status) => {
+        _FaultZone.dustBag: status.isDustBagMissing,
+        _FaultZone.waterTank: status.isCleanWaterTankMissing,
+        _FaultZone.sewageTank: status.isSewageTankMissing,
+        _FaultZone.mopPads: status.isMopPadsRemoved,
+        _FaultZone.dustBin: status.isDustBinMissing,
+      };
 
   @override
   void didUpdateWidget(covariant RobotIllustration oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.activity != widget.activity) {
+    if (oldWidget.status.activity != widget.status.activity) {
       final double eased = Curves.easeInOutCubic.transform(_transitionController.value);
       _fromParams = _StateParams.lerp(_fromParams, _toParams, eased);
-      _toParams = _StateParams.forActivity(widget.activity);
+      _toParams = _StateParams.forActivity(widget.status.activity);
       _transitionController
         ..value = 0
         ..forward();
     }
+    _currentFaults(widget.status).forEach((_FaultZone zone, bool active) {
+      final AnimationController controller = _faultControllers[zone]!;
+      if (active && controller.status != AnimationStatus.forward && controller.value != 1.0) {
+        controller.forward();
+      } else if (!active && controller.status != AnimationStatus.reverse && controller.value != 0.0) {
+        controller.reverse();
+      }
+    });
   }
 
   @override
   void dispose() {
     _loopController.dispose();
     _transitionController.dispose();
+    for (final AnimationController c in _faultControllers.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -65,7 +105,11 @@ class _RobotIllustrationState extends State<RobotIllustration> with TickerProvid
       height: widget.size,
       width: widget.size,
       child: AnimatedBuilder(
-        animation: Listenable.merge([_loopController, _transitionController]),
+        animation: Listenable.merge([
+          _loopController,
+          _transitionController,
+          ..._faultControllers.values,
+        ]),
         builder: (BuildContext context, Widget? _) {
           final _StateParams params = _StateParams.lerp(
             _fromParams,
@@ -74,7 +118,11 @@ class _RobotIllustrationState extends State<RobotIllustration> with TickerProvid
           );
           return CustomPaint(
             size: Size(widget.size, widget.size),
-            painter: _RobotScenePainter(params: params, loopPhase: _loopController.value),
+            painter: _RobotScenePainter(
+              params: params,
+              loopPhase: _loopController.value,
+              faultIntensity: {for (final entry in _faultControllers.entries) entry.key: entry.value.value},
+            ),
           );
         },
       ),
@@ -210,21 +258,27 @@ class _StateParams {
 }
 
 class _RobotScenePainter extends CustomPainter {
-  const _RobotScenePainter({required this.params, required this.loopPhase});
+  const _RobotScenePainter({required this.params, required this.loopPhase, required this.faultIntensity});
 
   final _StateParams params;
   final double loopPhase;
+  final Map<_FaultZone, double> faultIntensity;
+
+  double _intensity(_FaultZone zone) => faultIntensity[zone] ?? 0.0;
 
   @override
   void paint(Canvas canvas, Size size) {
     final double radius = size.shortestSide / 2 * 0.62;
     final Offset canvasCenter = size.center(Offset.zero);
     final double phaseAngle = loopPhase * 2 * math.pi;
+    // Fast independent blink for fault highlights, decoupled from the
+    // slower ambient loop so a fault reads as an alert, not decoration.
+    final double blink = 0.55 + 0.45 * math.sin(loopPhase * 2 * math.pi * 4.2);
 
     // Dock sits low in the canvas; the robot floats near the vertical
     // center when off-dock and settles onto the dock as approachAmount→1.
-    final Offset dockCenter = Offset(canvasCenter.dx, size.height * 0.78);
-    final Offset floatCenter = Offset(canvasCenter.dx, canvasCenter.dy - size.height * 0.04);
+    final Offset dockCenter = Offset(canvasCenter.dx, size.height * 0.74);
+    final Offset floatCenter = Offset(canvasCenter.dx, canvasCenter.dy - size.height * 0.08);
     Offset robotCenter = Offset.lerp(floatCenter, dockCenter, params.approachAmount)!;
 
     // Perpetual wander while cleaning; a gentle drift-toward-dock wobble
@@ -244,16 +298,17 @@ class _RobotScenePainter extends CustomPainter {
     }
 
     if (params.dockOpacity > 0.01) {
-      _paintDock(canvas, dockCenter, radius, params.dockOpacity);
+      _paintDock(canvas, dockCenter, radius, params.dockOpacity, blink);
     }
     if (params.arrowOpacity > 0.01) {
       _paintApproachChevrons(canvas, robotCenter, dockCenter, radius, params.arrowOpacity, phaseAngle);
     }
 
-    _paintRobot(canvas, robotCenter, radius, phaseAngle);
+    _paintRobot(canvas, robotCenter, radius, phaseAngle, blink);
+    _paintLabels(canvas, size, dockCenter, robotCenter, radius, blink);
   }
 
-  void _paintDock(Canvas canvas, Offset center, double radius, double opacity) {
+  void _paintDock(Canvas canvas, Offset center, double radius, double opacity, double blink) {
     final Rect dockRect = Rect.fromCenter(center: center, width: radius * 2.6, height: radius * 0.9);
     final RRect dockRRect = RRect.fromRectAndRadius(dockRect, Radius.circular(radius * 0.22));
 
@@ -282,6 +337,86 @@ class _RobotScenePainter extends CustomPainter {
     // Charging pin glyph.
     final Paint pinPaint = Paint()..color = params.glowColor.withValues(alpha: 0.6 * opacity);
     canvas.drawCircle(Offset(center.dx, center.dy - radius * 0.08), radius * 0.06, pinPaint);
+
+    // Sewage / dirty-water tank — LEFT side of the dock base.
+    _paintTankZone(
+      canvas,
+      center: Offset(center.dx - radius * 0.95, center.dy + radius * 0.05),
+      size: Size(radius * 0.55, radius * 0.62),
+      radius: radius,
+      neutralColor: const Color(0xFF6B5A3F),
+      opacity: opacity,
+      intensity: _intensity(_FaultZone.sewageTank),
+      blink: blink,
+    );
+
+    // Clean-water tank — RIGHT side of the dock base.
+    _paintTankZone(
+      canvas,
+      center: Offset(center.dx + radius * 0.95, center.dy + radius * 0.05),
+      size: Size(radius * 0.55, radius * 0.62),
+      radius: radius,
+      neutralColor: AppColors.neonBlue,
+      opacity: opacity,
+      intensity: _intensity(_FaultZone.waterTank),
+      blink: blink,
+    );
+
+    // Dust bag canister — standing at the back-center of the dock, behind
+    // where the robot seats.
+    final Offset bagCenter = Offset(center.dx, center.dy - radius * 0.62);
+    final Size bagSize = Size(radius * 0.5, radius * 0.68);
+    final double bagIntensity = _intensity(_FaultZone.dustBag);
+    final Color bagColor = Color.lerp(const Color(0xFF3A4356), AppColors.danger, bagIntensity * blink)!;
+    final RRect bagRRect = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: bagCenter, width: bagSize.width, height: bagSize.height),
+      Radius.circular(bagSize.width * 0.3),
+    );
+    if (bagIntensity > 0.01) {
+      final Paint bagGlow = Paint()
+        ..color = AppColors.danger.withValues(alpha: 0.45 * bagIntensity * blink)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+      canvas.drawRRect(bagRRect.inflate(3), bagGlow);
+    }
+    canvas.drawRRect(bagRRect, Paint()..color = bagColor.withValues(alpha: opacity));
+    canvas.drawRRect(
+      bagRRect,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5
+        ..color = (bagIntensity > 0.01 ? AppColors.danger : params.glowColor).withValues(alpha: 0.6 * opacity),
+    );
+  }
+
+  void _paintTankZone(
+    Canvas canvas, {
+    required Offset center,
+    required Size size,
+    required double radius,
+    required Color neutralColor,
+    required double opacity,
+    required double intensity,
+    required double blink,
+  }) {
+    final RRect rrect = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: center, width: size.width, height: size.height),
+      Radius.circular(size.width * 0.28),
+    );
+    final Color fill = Color.lerp(neutralColor, AppColors.danger, intensity * blink)!;
+    if (intensity > 0.01) {
+      final Paint glow = Paint()
+        ..color = AppColors.danger.withValues(alpha: 0.45 * intensity * blink)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+      canvas.drawRRect(rrect.inflate(3), glow);
+    }
+    canvas.drawRRect(rrect, Paint()..color = fill.withValues(alpha: (0.55 + 0.45 * intensity) * opacity));
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5
+        ..color = (intensity > 0.01 ? AppColors.danger : Colors.white).withValues(alpha: 0.5 * opacity),
+    );
   }
 
   void _paintApproachChevrons(
@@ -320,7 +455,7 @@ class _RobotScenePainter extends CustomPainter {
     }
   }
 
-  void _paintRobot(Canvas canvas, Offset center, double radius, double phaseAngle) {
+  void _paintRobot(Canvas canvas, Offset center, double radius, double phaseAngle, double blink) {
     final bool isActive = params.brushSpin > 0.01;
 
     // Ambient glow.
@@ -371,6 +506,33 @@ class _RobotScenePainter extends CustomPainter {
       ..color = params.glowColor.withValues(alpha: isActive ? 0.9 : 0.4);
     canvas.drawCircle(bumpCenter, radius * 0.16, bumpRingPaint);
 
+    // Internal dust bin lid — small panel just behind the sensor bump.
+    final double binIntensity = _intensity(_FaultZone.dustBin);
+    final Offset binCenter = center + Offset(0, -radius * 0.24);
+    final RRect binRRect = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: binCenter, width: radius * 0.34, height: radius * 0.16),
+      Radius.circular(radius * 0.04),
+    );
+    if (binIntensity > 0.01) {
+      canvas.drawRRect(
+        binRRect.inflate(2),
+        Paint()
+          ..color = AppColors.danger.withValues(alpha: 0.5 * binIntensity * blink)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+      );
+    }
+    canvas.drawRRect(
+      binRRect,
+      Paint()..color = Color.lerp(const Color(0xFF2E3646), AppColors.danger, binIntensity * blink)!,
+    );
+    canvas.drawRRect(
+      binRRect,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = radius * 0.015
+        ..color = (binIntensity > 0.01 ? AppColors.danger : params.glowColor).withValues(alpha: 0.7),
+    );
+
     // Side brush arcs — spin scales with brushSpin (0 while docked/paused).
     final Paint brushPaint = Paint()
       ..style = PaintingStyle.stroke
@@ -387,6 +549,35 @@ class _RobotScenePainter extends CustomPainter {
         4.6,
         false,
         brushPaint,
+      );
+    }
+
+    // Mop pads — two pads peeking out from beneath the front of the body.
+    final double mopIntensity = _intensity(_FaultZone.mopPads);
+    for (final double sign in [-1.0, 1.0]) {
+      final Offset padCenter = center + Offset(sign * radius * 0.32, radius * 0.86);
+      final RRect padRRect = RRect.fromRectAndRadius(
+        Rect.fromCenter(center: padCenter, width: radius * 0.34, height: radius * 0.2),
+        Radius.circular(radius * 0.08),
+      );
+      if (mopIntensity > 0.01) {
+        canvas.drawRRect(
+          padRRect.inflate(2.5),
+          Paint()
+            ..color = AppColors.danger.withValues(alpha: 0.5 * mopIntensity * blink)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+        );
+      }
+      canvas.drawRRect(
+        padRRect,
+        Paint()..color = Color.lerp(const Color(0xFF3D4557), AppColors.danger, mopIntensity * blink)!,
+      );
+      canvas.drawRRect(
+        padRRect,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = radius * 0.015
+          ..color = (mopIntensity > 0.01 ? AppColors.danger : Colors.white).withValues(alpha: 0.5),
       );
     }
 
@@ -407,8 +598,48 @@ class _RobotScenePainter extends CustomPainter {
     }
   }
 
+  void _paintLabels(Canvas canvas, Size size, Offset dockCenter, Offset robotCenter, double radius, double blink) {
+    final List<(Offset, String)> active = [
+      if (_intensity(_FaultZone.dustBag) > 0.4)
+        (Offset(dockCenter.dx, dockCenter.dy - radius * 1.15), 'Dust Bag Missing'),
+      if (_intensity(_FaultZone.waterTank) > 0.4)
+        (Offset(dockCenter.dx + radius * 0.95, dockCenter.dy + radius * 0.55), 'Water Tank Missing'),
+      if (_intensity(_FaultZone.sewageTank) > 0.4)
+        (Offset(dockCenter.dx - radius * 0.95, dockCenter.dy + radius * 0.55), 'Sewage Tank Missing'),
+      if (_intensity(_FaultZone.mopPads) > 0.4)
+        (Offset(robotCenter.dx, robotCenter.dy + radius * 1.1), 'Mop Pads Removed'),
+      if (_intensity(_FaultZone.dustBin) > 0.4)
+        (Offset(robotCenter.dx + radius * 0.75, robotCenter.dy - radius * 0.24), 'Dust Bin Removed'),
+    ];
+    for (final (Offset anchor, String label) in active) {
+      final TextPainter tp = TextPainter(
+        text: TextSpan(
+          text: label,
+          style: TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w700,
+            color: AppColors.danger.withValues(alpha: 0.7 + 0.3 * blink),
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout(maxWidth: size.width);
+      final Offset topLeft = Offset(
+        (anchor.dx - tp.width / 2).clamp(0.0, size.width - tp.width),
+        anchor.dy.clamp(0.0, size.height - tp.height),
+      );
+      final RRect bg = RRect.fromRectAndRadius(
+        (topLeft & tp.size).inflate(3),
+        const Radius.circular(4),
+      );
+      canvas.drawRRect(bg, Paint()..color = Colors.black.withValues(alpha: 0.55));
+      tp.paint(canvas, topLeft);
+    }
+  }
+
   @override
   bool shouldRepaint(covariant _RobotScenePainter oldDelegate) {
-    return oldDelegate.loopPhase != loopPhase || oldDelegate.params != params;
+    return oldDelegate.loopPhase != loopPhase ||
+        oldDelegate.params != params ||
+        oldDelegate.faultIntensity != faultIntensity;
   }
 }

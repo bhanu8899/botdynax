@@ -173,7 +173,7 @@ class _DashboardView extends ConsumerWidget {
       children: [
         _Header(status: status),
         const SizedBox(height: AppSpacing.lg),
-        Center(child: RobotIllustration(activity: status.activity)),
+        Center(child: RobotIllustration(status: status)),
         const SizedBox(height: AppSpacing.sm),
         Center(
           child: Text(_activityLabel(status.activity), style: theme.textTheme.headlineSmall),

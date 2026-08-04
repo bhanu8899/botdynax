@@ -155,6 +155,17 @@ class RobotStatus extends Equatable {
   bool get hasErrors => activeErrors.isNotEmpty;
   bool get isCleaning => activity == ActivityState.cleaning;
 
+  /// Named lookups into [faultCodes] for the specific physical components
+  /// the dashboard/dock illustration highlights individually. Codes are
+  /// empirically confirmed against the real Milagrow W300 (see
+  /// TuyaFault._confirmedFaults) — kept here, not re-derived per call site,
+  /// so every screen that cares about one specific component agrees.
+  bool get isDustBagMissing => faultCodes.contains(18);
+  bool get isMopPadsRemoved => faultCodes.contains(21);
+  bool get isCleanWaterTankMissing => faultCodes.contains(24);
+  bool get isSewageTankMissing => faultCodes.contains(25);
+  bool get isDustBinMissing => faultCodes.contains(46);
+
   RobotStatus copyWith({
     String? robotId,
     String? name,

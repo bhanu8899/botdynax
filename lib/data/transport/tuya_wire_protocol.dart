@@ -112,11 +112,22 @@ class TuyaFault {
     // Sewage tank toggled three times: out -> 0x19, in -> 0x00, every
     // time. The two tanks report genuinely distinct codes.
     25: 'Sewage tank removed',
+
+    // The robot's internal dust bin (separate component from the dock's
+    // dust bag, code 18) pulled out -> 0x2E.
+    46: 'Dust bin removed from robot',
+
+    // Confirmed persistent, not transient: stays at 0x0D the whole time
+    // the dust bin sits installed (does not settle back to 0x00 like the
+    // dock/self-check codes do). Functionally this is this device's
+    // "dust bin present" status rather than a fault, so it's grouped with
+    // the informational codes below even though it doesn't clear.
+    13: 'Dust bin installed',
   };
 
   /// Codes that are normal automatic dock routine, not a problem — don't
   /// raise the "needs attention" banner for these.
-  static const Set<int> _informationalCodes = <int>{22};
+  static const Set<int> _informationalCodes = <int>{22, 13};
 
   String get description => _confirmedFaults[code] ?? 'Robot fault (code $code)';
 
@@ -383,24 +394,32 @@ abstract final class TuyaWireProtocol {
     return status.copyWith(connection: RobotConnectionState.connected, lastUpdated: DateTime.now());
   }
 
-  /// `edge_brush`/`roll_brush`/`filter` are read here as 0-100 remaining
-  /// life percentages, per Tuya's documented convention for these codes in
-  /// the robot-vacuum standard instruction set. Rated lifetimes below are
-  /// typical manufacturer defaults, not confirmed for the W300 specifically
-  /// — cross-check against the Milagrow app if the numbers look off.
+  /// `roll_brush_life`/`edge_brush_life`/`filter_life`/`mop_life` are NOT
+  /// 0-100 percentages — confirmed against the device's real v2.0 thing
+  /// model (`GET /v2.0/cloud/thing/{id}/model`), each is `{type: "value",
+  /// unit: "min"}`: a running count of *minutes used*, with the type
+  /// spec's `max` as the rated service life. Treating the raw value as a
+  /// percentage (old code: `rawValue / 100`) meant every accessory clamped
+  /// to 100% the moment usage passed 100 minutes and never moved again —
+  /// this is why the values looked static. Rated lifetimes below are each
+  /// DP's confirmed `max` from the thing model, not estimates.
   static List<Consumable> _updateConsumable(List<Consumable> consumables, ConsumableType type, num rawValue) {
-    final double remainingPercent = (rawValue.toDouble() / 100.0).clamp(0.0, 1.0);
+    final int usedMinutes = rawValue.round();
     final int ratedLifetimeMinutes = switch (type) {
-      ConsumableType.mainBrush => 400 * 60,
-      ConsumableType.sideBrush => 200 * 60,
-      ConsumableType.filter => 100 * 60,
+      ConsumableType.mainBrush => 18000, // roll_brush_life max
+      ConsumableType.sideBrush => 9000, // edge_brush_life max
+      ConsumableType.filter => 9000, // filter_life max
+      ConsumableType.mopPad => 18000, // mop_life max
       _ => 0,
     };
+    final double remainingPercent = ratedLifetimeMinutes == 0
+        ? 0.0
+        : (1 - (usedMinutes / ratedLifetimeMinutes)).clamp(0.0, 1.0);
     final Consumable updated = Consumable(
       type: type,
       remainingPercent: remainingPercent,
       ratedLifetimeMinutes: ratedLifetimeMinutes,
-      usedMinutes: (ratedLifetimeMinutes * (1 - remainingPercent)).round(),
+      usedMinutes: usedMinutes,
     );
     final int index = consumables.indexWhere((c) => c.type == type);
     if (index == -1) return [...consumables, updated];
