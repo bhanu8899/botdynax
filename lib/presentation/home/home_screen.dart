@@ -277,11 +277,20 @@ class _DashboardView extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: AppSpacing.sm),
+        // Deliberately NOT dust-bin / water-tank fill percentages: this
+        // robot has no DP for either, so those tiles could only ever show
+        // a hardcoded 0%. These two are real — `water_output` and the
+        // mop-pad fault code both come straight off the device.
         Row(
           children: [
-            Expanded(child: _MiniStat(label: 'Dust Bin', value: '${(status.dustBinPercent * 100).round()}%')),
+            Expanded(child: _MiniStat(label: 'Water Level', value: _waterLabel(status.waterFlow))),
             const SizedBox(width: AppSpacing.sm),
-            Expanded(child: _MiniStat(label: 'Water Tank', value: '${(status.waterTankPercent * 100).round()}%')),
+            Expanded(
+              child: _MiniStat(
+                label: 'Mop Pads',
+                value: status.faultCodes.contains(21) ? 'Removed' : 'Fitted',
+              ),
+            ),
           ],
         ),
         if (status.consumables.isNotEmpty) ...[
@@ -306,6 +315,13 @@ class _DashboardView extends ConsumerWidget {
       ],
     );
   }
+
+  String _waterLabel(WaterFlow flow) => switch (flow) {
+        WaterFlow.off => 'Off',
+        WaterFlow.low => 'Low',
+        WaterFlow.medium => 'Medium',
+        WaterFlow.high || WaterFlow.ultra => 'High',
+      };
 
   String _activityLabel(ActivityState activity) => switch (activity) {
         ActivityState.idle => 'Idle',
@@ -349,8 +365,13 @@ class _ErrorBanner extends StatelessWidget {
           const Icon(Icons.warning_amber_rounded, color: AppColors.danger),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
+            // Prefer the robot's own decoded fault text ("Sewage tank
+            // removed") over the generic per-error-code message, which is
+            // only a fallback for robots that report no specific cause.
             child: Text(
-              status.activeErrors.map((RobotErrorCode e) => e.message).join('\n'),
+              status.faultMessages.isNotEmpty
+                  ? status.faultMessages.join('\n')
+                  : status.activeErrors.map((RobotErrorCode e) => e.message).join('\n'),
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.danger),
             ),
           ),

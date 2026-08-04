@@ -44,6 +44,7 @@ class RobotStatus extends Equatable {
     required this.isChildLockOn,
     required this.isMopAttached,
     required this.faultCodes,
+    required this.faultMessages,
     required this.lastUpdated,
   });
 
@@ -72,6 +73,7 @@ class RobotStatus extends Equatable {
       isChildLockOn: false,
       isMopAttached: false,
       faultCodes: const [],
+      faultMessages: const [],
       lastUpdated: DateTime.fromMillisecondsSinceEpoch(0),
     );
   }
@@ -118,6 +120,11 @@ class RobotStatus extends Equatable {
   /// numbers unless confirmed against the real device.
   final List<int> faultCodes;
 
+  /// Human-readable text for each active fault, in the same order as
+  /// [faultCodes]. Populated by the transport that decoded them, since
+  /// only it knows which codes have been confirmed on real hardware.
+  final List<String> faultMessages;
+
   final DateTime lastUpdated;
 
   bool get isOnline => connection == RobotConnectionState.connected;
@@ -148,6 +155,7 @@ class RobotStatus extends Equatable {
     bool? isChildLockOn,
     bool? isMopAttached,
     List<int>? faultCodes,
+    List<String>? faultMessages,
     DateTime? lastUpdated,
     bool clearCurrentRoom = false,
     bool clearCurrentTask = false,
@@ -176,6 +184,7 @@ class RobotStatus extends Equatable {
       isChildLockOn: isChildLockOn ?? this.isChildLockOn,
       isMopAttached: isMopAttached ?? this.isMopAttached,
       faultCodes: faultCodes ?? this.faultCodes,
+      faultMessages: faultMessages ?? this.faultMessages,
       lastUpdated: lastUpdated ?? this.lastUpdated,
     );
   }
@@ -205,6 +214,7 @@ class RobotStatus extends Equatable {
         isChildLockOn,
         isMopAttached,
         faultCodes,
+        faultMessages,
         lastUpdated,
       ];
 }

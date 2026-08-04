@@ -63,17 +63,48 @@ abstract final class TuyaDpCodes {
 
 /// One active fault reported via [TuyaDpCodes.totalError].
 ///
-/// The device transmits fault *numbers* only — the number→meaning mapping
-/// lives in Tuya's per-product panel translations, not in the thing model,
-/// so it is not derivable from the API. Codes confirmed by observing the
-/// real robot are named here; anything else is surfaced by number rather
-/// than guessed at.
+/// The device transmits fault *numbers* only — the number-to-meaning
+/// mapping lives in Tuya's per-product panel translations, not in the
+/// thing model, so it cannot be derived from any API. [_confirmedFaults]
+/// therefore contains ONLY codes observed on the real Milagrow W300 by
+/// physically triggering the condition and reading back `total_error`.
+/// Anything else is reported by number rather than mislabelled.
 class TuyaFault {
   const TuyaFault(this.code);
 
   final int code;
 
-  String get description => 'Fault code $code';
+  /// Empirically confirmed against the real device. Extend this only by
+  /// actually reproducing a fault and reading the resulting code — never
+  /// by guessing from another vendor's fault table.
+  /// Every entry below was captured by physically triggering the condition
+  /// on the real robot and reading back `total_error` — each one toggled
+  /// out/in repeatedly from a confirmed-clear (`0x00`) baseline, so the
+  /// correlation is reproducible rather than a one-off coincidence.
+  static const Map<int, String> _confirmedFaults = <int, String>{
+    // Dust bag pulled from the dock: 0x12 while out, 0x00 when reseated,
+    // across three consecutive toggles.
+    18: 'Dust bag removed from the dock',
+
+    // Mop pads taken off the robot: 0x15 while off, back to 0x00 once
+    // refitted. Note `mop_state` stayed "installed" throughout, so it
+    // tracks the mop module/bracket rather than the pads themselves —
+    // pad presence has to come from this fault code, not that DP.
+    21: 'Mop pads removed',
+
+    // Clean water tank out -> 0x18; reinserting cleared it to 0x00.
+    24: 'Clean water tank removed',
+
+    // Sewage tank toggled three times: out -> 0x19, in -> 0x00, every
+    // time. The two tanks report genuinely distinct codes.
+    25: 'Sewage tank removed',
+  };
+
+  String get description => _confirmedFaults[code] ?? 'Robot fault (code $code)';
+
+  /// Whether this code has a confirmed human-readable meaning, as opposed
+  /// to being surfaced as a bare number.
+  bool get isIdentified => _confirmedFaults.containsKey(code);
 
   @override
   bool operator ==(Object other) => other is TuyaFault && other.code == code;
@@ -247,6 +278,7 @@ abstract final class TuyaWireProtocol {
     final bool hasFault = faults.isNotEmpty || resolvedActivity == ActivityState.error;
     status = status.copyWith(
       faultCodes: faults.map((TuyaFault f) => f.code).toList(),
+      faultMessages: faults.map((TuyaFault f) => f.description).toList(),
       activeErrors: hasFault ? const [RobotErrorCode.needsAttention] : const [],
     );
 
