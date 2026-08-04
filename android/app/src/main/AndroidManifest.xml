@@ -11,16 +11,10 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30"/>
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false"/>
 
-    <!-- BackendConfig points at a plain-http:// LAN backend during
-         development (see lib/core/constants/backend_config.dart) — Android
-         blocks all cleartext traffic by default on API 28+, which silently
-         drops every request before it leaves the device. Remove this once
-         the backend is served over https://. -->
     <application
         android:label="botdynax"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true">
+        android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
             android:exported="true"

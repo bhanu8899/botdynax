@@ -6,6 +6,7 @@ import axios from 'axios';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { TuyaClientService } from './tuya-client.service';
+import { decodeSweeperPath } from './tuya-map-decoder';
 
 export interface TuyaDeviceSummary {
   id: string;
@@ -160,7 +161,15 @@ export class TuyaService {
   /// `.bin` extension Tuya's `download` endpoint returns for the map file,
   /// its content is plain JSON (`mapData`/`pathData`/`mapAdditional`) — not
   /// a proprietary binary format requiring Tuya's Panel SDK to decode.
-  async getLatestMap(deviceId: string): Promise<unknown> {
+  ///
+  /// Returns the raw map JSON plus a decoded `path` block (trajectory,
+  /// current robot position, derived heading). Tuya publishes a fresh map
+  /// snapshot periodically while the robot cleans — the path grows between
+  /// snapshots — so re-fetching this drives a live-updating map. Note the
+  /// separate `/realtime-map` endpoint returns an empty result for this
+  /// device even mid-clean (verified over repeated polls during a
+  /// confirmed active run), so these snapshots are the real source.
+  async getLatestMap(deviceId: string): Promise<Record<string, unknown>> {
     const list = await this.client.request<{ datas: TuyaMapFileEntry[] }>({
       method: 'GET',
       path: `/v1.0/users/sweepers/file/${deviceId}/list?file_type=pic&page_no=1&page_size=20`,
@@ -180,7 +189,22 @@ export class TuyaService {
       responseType: 'text',
       transformResponse: (data: string) => data,
     });
-    return JSON.parse(mapFile.data);
+    const parsed = JSON.parse(mapFile.data) as Record<string, unknown>;
+
+    const mapData = parsed.mapData as
+      | { origin?: [number, number]; resolution?: number }
+      | undefined;
+    const pathData = parsed.pathData as { rawData?: string } | undefined;
+
+    if (mapData?.origin && typeof mapData.resolution === 'number') {
+      parsed.path = decodeSweeperPath(pathData?.rawData, mapData.origin, mapData.resolution);
+    } else {
+      parsed.path = { points: [], robotPosition: null, headingRadians: null };
+    }
+    parsed.snapshotId = latest.id;
+    parsed.snapshotTime = latest.time;
+
+    return parsed;
   }
 
   private async requireTuyaUid(botDyNaxUserId: string): Promise<string> {
