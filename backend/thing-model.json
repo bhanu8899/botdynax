@@ -1,0 +1,684 @@
+{
+  "modelId": "e1ncs104",
+  "services": [
+    {
+      "actions": [],
+      "code": "",
+      "description": "",
+      "events": [],
+      "name": "",
+      "properties": [
+        {
+          "abilityId": 1,
+          "accessMode": "rw",
+          "code": "switch_go",
+          "description": "true：清扫启动\nfalse：清扫停止",
+          "extensions": {
+            "iconName": "icon-power",
+            "attribute": "672"
+          },
+          "name": "清扫",
+          "typeSpec": {
+            "type": "bool"
+          }
+        },
+        {
+          "abilityId": 2,
+          "accessMode": "rw",
+          "code": "pause",
+          "description": "true：暂停当前工作状态\nfalse：继续当前工作状态",
+          "extensions": {
+            "iconName": "icon-dp_pause",
+            "attribute": "672"
+          },
+          "name": "暂停/继续",
+          "typeSpec": {
+            "type": "bool"
+          }
+        },
+        {
+          "abilityId": 3,
+          "accessMode": "rw",
+          "code": "switch_charge",
+          "description": "true：回充启动\nfalse：回充停止",
+          "extensions": {
+            "iconName": "icon-a_power",
+            "attribute": "672"
+          },
+          "name": "回充开关",
+          "typeSpec": {
+            "type": "bool"
+          }
+        },
+        {
+          "abilityId": 4,
+          "accessMode": "rw",
+          "code": "mode",
+          "description": "默认值（不可修改删除，否则影响控制面板逻辑）：\nsmart - 自动清扫模式/全屋清扫模式 \nchargego - 自动回充模式（需要兼容：goto_charge）\nzone - 划区清扫模式/矩形清扫模式\npose - 指哪扫哪模式/定点清扫模式\nselect_room - 选区清扫模式\nquick_mapping - 快速建图模式",
+          "extensions": {
+            "iconName": "icon-dp_mode",
+            "attribute": "704"
+          },
+          "name": "工作模式",
+          "typeSpec": {
+            "type": "enum",
+            "range": [
+              "smart",
+              "goto_charge",
+              "zone",
+              "pose",
+              "select_room",
+              "manual",
+              "quick_mapping"
+            ]
+          }
+        },
+        {
+          "abilityId": 5,
+          "accessMode": "ro",
+          "code": "status",
+          "description": "",
+          "extensions": {
+            "iconName": "icon-zhuangtai",
+            "scope": "",
+            "attribute": "706"
+          },
+          "name": "状态",
+          "typeSpec": {
+            "type": "enum",
+            "range": [
+              "standby",
+              "smart",
+              "zone_clean",
+              "part_clean",
+              "cleaning",
+              "paused",
+              "goto_pos",
+              "pos_arrived",
+              "pos_unarrive",
+              "goto_charge",
+              "charging",
+              "charge_done",
+              "sleep",
+              "select_room",
+              "seek_dust_bucket",
+              "mapping",
+              "relocation",
+              "breakpoint_charging",
+              "manual_control",
+              "mapping_done",
+              "backtowashmop",
+              "paused_backtowashmop",
+              "relocation_recharge",
+              "collecting_dust",
+              "washing",
+              "airing",
+              "breakpoint_washing",
+              "fault"
+            ]
+          }
+        },
+        {
+          "abilityId": 6,
+          "accessMode": "rw",
+          "code": "customize_mode_switch",
+          "description": "用于设置是否需要使用自定义的房间模式进行工作，如果需要使用自定义模式，则需要打开该开关",
+          "extensions": {
+            "iconName": "icon-dp_power2",
+            "attribute": "640"
+          },
+          "name": "个性化清洁偏好开关",
+          "typeSpec": {
+            "type": "bool"
+          }
+        },
+        {
+          "abilityId": 7,
+          "accessMode": "rw",
+          "code": "sweep_mop_mode",
+          "description": "清洁偏好设置中，面板逻辑：clean_before_mop枚举值存在的时候，面板显示出来选项；枚举值不存在的时候，面板动态调整显示",
+          "extensions": {
+            "iconName": "icon-dp_mode",
+            "attribute": "512"
+          },
+          "name": "清洁模式",
+          "typeSpec": {
+            "type": "enum",
+            "range": [
+              "only_sweep",
+              "only_mop",
+              "both_work",
+              "clean_before_mop"
+            ]
+          }
+        },
+        {
+          "abilityId": 8,
+          "accessMode": "rw",
+          "code": "clean_times",
+          "description": "",
+          "extensions": {
+            "iconName": "icon-dp_loop",
+            "attribute": "512"
+          },
+          "name": "清洁次数",
+          "typeSpec": {
+            "type": "value",
+            "max": 2,
+            "min": 1,
+            "scale": 0,
+            "step": 1,
+            "unit": ""
+          }
+        },
+        {
+          "abilityId": 9,
+          "accessMode": "rw",
+          "code": "suction",
+          "description": "默认值（可修改、删除、增加）：\n\nclosed - 关闭\ngentle - 安静\nnormal - 正常\nstrong - 强劲\nmax - 超强\n\n选项排列与此处值的排列顺序一致，可调整排列顺序，可删减值，可增加其他状态值，状态值尽量是状态的英文小写单词，如需要增加自动状态，则为auto",
+          "extensions": {
+            "iconName": "icon-Strong",
+            "attribute": "1664"
+          },
+          "name": "吸力",
+          "typeSpec": {
+            "type": "enum",
+            "range": [
+              "closed",
+              "gentle",
+              "normal",
+              "strong",
+              "max"
+            ]
+          }
+        },
+        {
+          "abilityId": 10,
+          "accessMode": "rw",
+          "code": "water_output",
+          "description": "",
+          "extensions": {
+            "iconName": "icon-dp_water",
+            "attribute": "512"
+          },
+          "name": "拖地水量",
+          "typeSpec": {
+            "type": "enum",
+            "range": [
+              "closed",
+              "low",
+              "middle",
+              "high"
+            ]
+          }
+        },
+        {
+          "abilityId": 11,
+          "accessMode": "ro",
+          "code": "mop_state",
+          "description": "",
+          "extensions": {
+            "iconName": "",
+            "attribute": "512"
+          },
+          "name": "拖布状态",
+          "typeSpec": {
+            "type": "enum",
+            "range": [
+              "none",
+              "installed"
+            ]
+          }
+        },
+        {
+          "abilityId": 13,
+          "accessMode": "rw",
+          "code": "carpet_clean_prefer",
+          "description": "默认值（不可修改删除，否则影响控制面板逻辑）：\nadaptive - 自适应\nevade - 规避\nignore - 忽略\n\n面板端需要做兼容适配，如果有adaptive,则需要有对应的选项显示；如果没有该枚举值，则不显示\n\n可在后面增加其他状态值，状态值尽量是状态的英文小写单词，如需要增加故障中状态，则为in_trouble",
+          "extensions": {
+            "iconName": "icon-dp_mode",
+            "attribute": "1536"
+          },
+          "name": "地毯清洁设置",
+          "typeSpec": {
+            "type": "enum",
+            "range": [
+              "adaptive",
+              "evade",
+              "ignore"
+            ]
+          }
+        },
+        {
+          "abilityId": 14,
+          "accessMode": "rw",
+          "code": "auto_boost",
+          "description": "",
+          "extensions": {
+            "iconName": "icon-dp_up",
+            "attribute": "512"
+          },
+          "name": "地毯增压",
+          "typeSpec": {
+            "type": "bool"
+          }
+        },
+        {
+          "abilityId": 15,
+          "accessMode": "rw",
+          "code": "break_clean",
+          "description": "",
+          "extensions": {
+            "iconName": "icon-dp_wash",
+            "attribute": "736"
+          },
+          "name": "断点续扫",
+          "typeSpec": {
+            "type": "bool"
+          }
+        },
+        {
+          "abilityId": 16,
+          "accessMode": "ro",
+          "code": "clean_time",
+          "description": "默认区间为0min—9999分钟（没有小数点），如果需要显示为小数点，可以修改倍数参数，例如需要支持一位小数点，则倍数参数为1，上报的数值会经过计算，保留一位小数，例如上报589，经过换算后为58.9min",
+          "extensions": {
+            "iconName": "icon-dp_time3",
+            "attribute": "1888"
+          },
+          "name": "清扫时间",
+          "typeSpec": {
+            "type": "value",
+            "max": 9999,
+            "min": 0,
+            "scale": 0,
+            "step": 1,
+            "unit": "min"
+          }
+        },
+        {
+          "abilityId": 17,
+          "accessMode": "ro",
+          "code": "clean_area",
+          "description": "默认区间为0㎡—9999㎡（没有小数点），如果需要显示为小数点，可以修改倍数参数，例如需要支持一位小数点，则倍数参数为1，上报的数值会经过计算，保留一位小数，例如上报589，经过换算后为58.9㎡",
+          "extensions": {
+            "iconName": "icon-icon-test10",
+            "attribute": "1760"
+          },
+          "name": "清扫面积",
+          "typeSpec": {
+            "type": "value",
+            "max": 9999,
+            "min": 0,
+            "scale": 0,
+            "step": 1,
+            "unit": "㎡"
+          }
+        },
+        {
+          "abilityId": 18,
+          "accessMode": "ro",
+          "code": "message_push",
+          "description": "可以编辑消息推送，从而在app中显示相应内容",
+          "extensions": {
+            "iconName": "icon-message_push",
+            "attribute": "0"
+          },
+          "name": "消息推送",
+          "typeSpec": {
+            "type": "value",
+            "max": 999,
+            "min": 0,
+            "scale": 0,
+            "step": 1,
+            "unit": ""
+          }
+        },
+        {
+          "abilityId": 19,
+          "accessMode": "rw",
+          "code": "edge_brush_life",
+          "description": "\"默认区间为0min—9000min（不支持小数点），百分比公式：剩余百分比=上报的剩余时间/DP点设置的区间最大值。 注意：重置寿命，下发0\"",
+          "extensions": {
+            "iconName": "icon-icon-percent",
+            "attribute": "1728"
+          },
+          "name": "边刷已使用寿命",
+          "typeSpec": {
+            "type": "value",
+            "max": 9000,
+            "min": 0,
+            "scale": 0,
+            "step": 1,
+            "unit": "min"
+          }
+        },
+        {
+          "abilityId": 20,
+          "accessMode": "rw",
+          "code": "roll_brush_life",
+          "description": "默认区间为0min—18000min（不支持小数点），百分比公式：剩余百分比=上报的剩余时间/DP点设置的区间最大值。 注意：重置寿命，下发0",
+          "extensions": {
+            "iconName": "icon-icon-percent",
+            "scope": "",
+            "attribute": "1856"
+          },
+          "name": "滚刷已使用寿命",
+          "typeSpec": {
+            "type": "value",
+            "max": 18000,
+            "min": 0,
+            "scale": 0,
+            "step": 1,
+            "unit": "min"
+          }
+        },
+        {
+          "abilityId": 21,
+          "accessMode": "rw",
+          "code": "mop_life",
+          "description": "默认区间为0min—9000min（不支持小数点），百分比公式：剩余百分比=上报的剩余时间/DP点设置的区间最大值。 注意：重置寿命，下发0",
+          "extensions": {
+            "iconName": "icon-dp_moplife",
+            "scope": "",
+            "attribute": "608"
+          },
+          "name": "拖布已使用寿命",
+          "typeSpec": {
+            "type": "value",
+            "max": 18000,
+            "min": 0,
+            "scale": 0,
+            "step": 1,
+            "unit": "min"
+          }
+        },
+        {
+          "abilityId": 22,
+          "accessMode": "rw",
+          "code": "filter_life",
+          "description": "默认区间为0min—9000min（不支持小数点），百分比公式：剩余百分比=上报的剩余时间/DP点设置的区间最大值。 注意：重置寿命，下发0",
+          "extensions": {
+            "iconName": "icon-dp_time2",
+            "attribute": "1728"
+          },
+          "name": "滤芯已使用寿命",
+          "typeSpec": {
+            "type": "value",
+            "max": 9000,
+            "min": 0,
+            "scale": 0,
+            "step": 1,
+            "unit": "min"
+          }
+        },
+        {
+          "abilityId": 23,
+          "accessMode": "ro",
+          "code": "battery_percentage",
+          "description": "默认区间为0%—100%（没有小数点），如果需要显示为小数点，可以修改倍数参数，例如需要支持一位小数点，则倍数参数为1，上报的数值会经过计算，保留一位小数，例如上报589，经过换算后为58.9%",
+          "extensions": {
+            "iconName": "icon-dp_battery",
+            "attribute": "706"
+          },
+          "name": "剩余电量",
+          "typeSpec": {
+            "type": "value",
+            "max": 100,
+            "min": 0,
+            "scale": 0,
+            "step": 1,
+            "unit": "%"
+          }
+        },
+        {
+          "abilityId": 24,
+          "accessMode": "rw",
+          "code": "volume_set",
+          "description": "默认区间为0—100，可自行修改区间，不支持小数点",
+          "extensions": {
+            "iconName": "icon-dp_voice",
+            "attribute": "1664"
+          },
+          "name": "语音音量",
+          "typeSpec": {
+            "type": "value",
+            "max": 100,
+            "min": 0,
+            "scale": 0,
+            "step": 1,
+            "unit": "%"
+          }
+        },
+        {
+          "abilityId": 26,
+          "accessMode": "rw",
+          "code": "direction_control",
+          "description": "默认值（不可修改、删除、增加），按键按下下发对应的方向值，松手下发停",
+          "extensions": {
+            "iconName": "icon-dp_compass",
+            "attribute": "1760"
+          },
+          "name": "遥控模式",
+          "typeSpec": {
+            "type": "enum",
+            "range": [
+              "forward",
+              "turn_left",
+              "turn_right",
+              "stop",
+              "exit"
+            ]
+          }
+        },
+        {
+          "abilityId": 27,
+          "accessMode": "rw",
+          "code": "seek",
+          "description": "",
+          "extensions": {
+            "iconName": "icon-dp_magnifier",
+            "attribute": "736"
+          },
+          "name": "寻找机器人",
+          "typeSpec": {
+            "type": "bool"
+          }
+        },
+        {
+          "abilityId": 28,
+          "accessMode": "rw",
+          "code": "total_error",
+          "description": "设备故障上报；16进制，每1byte表示一个故障，如0102041E代表同时发生故障1、故障2、故障4、故障30；00代表无故障/故障解除；按照故障序号配置面板多语言；",
+          "extensions": {
+            "iconName": "icon-dp_totalerror",
+            "attribute": "512"
+          },
+          "name": "故障上报",
+          "typeSpec": {
+            "type": "raw",
+            "maxlen": 128
+          }
+        },
+        {
+          "abilityId": 30,
+          "accessMode": "rw",
+          "code": "manual_dust_collection",
+          "description": "DP30 手动集尘：消费者手动点击，立即集尘-首页基站设置中操作；\n\nDP31 自动集尘：表示 机器清扫后是否要设备端主动去集尘操作-更多设置-基站设置页面；\n\n当DP31 自动集尘关闭后，消费者也可以点击DP30手动集尘进行集尘操作。\n",
+          "extensions": {
+            "iconName": "icon-manual_dust_collection",
+            "attribute": "0"
+          },
+          "name": "集尘",
+          "typeSpec": {
+            "type": "bool"
+          }
+        },
+        {
+          "abilityId": 31,
+          "accessMode": "rw",
+          "code": "auto_dust_collection",
+          "description": "DP30 手动集尘：消费者手动点击，立即集尘-首页基站设置中操作；\n\nDP31 自动集尘：表示 机器清扫后是否要设备端主动去集尘操作-更多设置-基站设置页面；\n\n当DP31 自动集尘关闭后，消费者也可以点击DP30手动集尘进行集尘操作。",
+          "extensions": {
+            "iconName": "icon-auto_dust_collection",
+            "attribute": "0"
+          },
+          "name": "自动集尘",
+          "typeSpec": {
+            "type": "bool"
+          }
+        },
+        {
+          "abilityId": 32,
+          "accessMode": "rw",
+          "code": "dust_collection_frequency",
+          "description": "once: 每1次清扫后集尘\ntwice: 每2次清扫后集尘\nthree times：每3次清扫后集尘\nfour times：每4次清扫后集尘",
+          "extensions": {
+            "iconName": "icon-dust_collection_frequency",
+            "scope": "",
+            "attribute": "0"
+          },
+          "name": "集尘频率",
+          "typeSpec": {
+            "type": "enum",
+            "range": [
+              "once",
+              "twice",
+              "three_times",
+              "four_times"
+            ]
+          }
+        },
+        {
+          "abilityId": 33,
+          "accessMode": "rw",
+          "code": "wash",
+          "description": "",
+          "extensions": {
+            "iconName": "icon-wash",
+            "attribute": "0"
+          },
+          "name": "清洗拖布",
+          "typeSpec": {
+            "type": "bool"
+          }
+        },
+        {
+          "abilityId": 34,
+          "accessMode": "rw",
+          "code": "frequnecy_wash_time",
+          "description": "",
+          "extensions": {
+            "iconName": "icon-frequnecy_wash_time",
+            "scope": "",
+            "attribute": "0"
+          },
+          "name": "回洗时间频率",
+          "typeSpec": {
+            "type": "value",
+            "max": 30,
+            "min": 10,
+            "scale": 0,
+            "step": 10,
+            "unit": "min"
+          }
+        },
+        {
+          "abilityId": 35,
+          "accessMode": "rw",
+          "code": "wash_medhod",
+          "description": "清洗拖布的模式，可以选择按区域或者按时间：\n1.如果选择按时间，或者按时间+按区域，则必须选中DP34回洗时间频率\n2.如果仅选择按区域，则可以删除DP34回洗时间频率",
+          "extensions": {
+            "iconName": "icon-wash_method",
+            "scope": "",
+            "attribute": "0"
+          },
+          "name": "回洗方式",
+          "typeSpec": {
+            "type": "enum",
+            "range": [
+              "time_wash"
+            ]
+          }
+        },
+        {
+          "abilityId": 36,
+          "accessMode": "rw",
+          "code": "wash_mode",
+          "description": "拖布清洗的设置时间 \nquick 快速 \ndeep 深度",
+          "extensions": {
+            "iconName": "icon-dp_wash",
+            "scope": "",
+            "attribute": "0"
+          },
+          "name": "清洗模式",
+          "typeSpec": {
+            "type": "enum",
+            "range": [
+              "quick",
+              "deep"
+            ]
+          }
+        },
+        {
+          "abilityId": 37,
+          "accessMode": "rw",
+          "code": "manual_air",
+          "description": "DP37手动烘干：表示消费者点击烘干按钮进行人为操作，位于首页基站设置;\nDP38自动烘干：表示机器每次清扫结束后，设备端是否会主动开启烘干操作，位于更多设置-基站设置页面；\n当DP38自动烘干关闭后，消费者仍然可以点击DP37进行手动烘干操作。",
+          "extensions": {
+            "iconName": "icon-manual_air",
+            "attribute": "0"
+          },
+          "name": "烘干",
+          "typeSpec": {
+            "type": "bool"
+          }
+        },
+        {
+          "abilityId": 38,
+          "accessMode": "rw",
+          "code": "auto_air",
+          "description": "DP37手动烘干：表示消费者点击烘干按钮进行人为操作，位于首页基站设置;\nDP38自动烘干：表示机器每次清扫结束后，设备端是否会主动开启烘干操作，位于更多设置-基站设置页面；\n当DP38自动烘干关闭后，消费者仍然可以点击DP37进行手动烘干操作。",
+          "extensions": {
+            "iconName": "icon-auto_air",
+            "attribute": "0"
+          },
+          "name": "烘干",
+          "typeSpec": {
+            "type": "bool"
+          }
+        },
+        {
+          "abilityId": 39,
+          "accessMode": "rw",
+          "code": "airing_mode",
+          "description": "",
+          "extensions": {
+            "iconName": "icon-airing_mode",
+            "scope": "",
+            "attribute": "0"
+          },
+          "name": "烘干模式",
+          "typeSpec": {
+            "type": "enum",
+            "range": [
+              "quick_airing",
+              "normal_airing",
+              "deep_airing"
+            ]
+          }
+        },
+        {
+          "abilityId": 150,
+          "accessMode": "rw",
+          "code": "obstacle_avoidance",
+          "description": "",
+          "name": "AI避障",
+          "typeSpec": {
+            "type": "bool"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,35 +1,85 @@
+import 'dart:convert';
+
 import '../../domain/entities/consumable.dart';
 import '../../domain/entities/robot_command.dart';
 import '../../domain/entities/robot_enums.dart';
 import '../../domain/entities/robot_status.dart';
 
 /// Maps between our domain model and the REAL Tuya DP (data point) schema
-/// confirmed live against the user's Milagrow iMap Max W300
-/// (device_id `d784c044cd0ee1361f329a`, product_id `LW41MF`) via
-/// `GET /tuya/robots/:robotId/functions` and `/status`. Unlike a generic
-/// "standard sweeper category" template, every code/enum value below was
-/// read back from that device, not guessed.
+/// of the user's Milagrow iMap Max W300 (device_id `d784c044cd0ee1361f329a`,
+/// product_id `LW41MF`). Every code and enum value below was read back from
+/// that device, not guessed.
 ///
-/// This product has no mop/water system and no child-lock DP — those
-/// domain commands are intentionally no-ops here (see [TuyaWireProtocol]).
+/// Important: two different schemas exist for this robot. Tuya's v1.x
+/// `/specifications` endpoint returns only the *standard instruction set*
+/// (17 DPs, some renamed), while the v2.0 thing model
+/// (`/v2.0/cloud/thing/{id}/model`) returns the device's real definition —
+/// 37 DPs, including `total_error`, `mop_state`, `water_output`,
+/// `sweep_mop_mode` and `mop_life`, which v1.x omits entirely. Status is
+/// read from the v2.0 shadow; commands still go through the v1.x
+/// `/commands` endpoint, so v1 code names are used when sending.
 abstract final class TuyaDpCodes {
-  static const String powerGo = 'power_go'; // bool: true = start/resume cleaning, false = stop
+  // Codes as they appear in the device's real v2.0 thing model. Tuya's
+  // v1.x "standard instruction set" renames several of these, so the v1
+  // aliases are listed alongside and both are accepted when decoding —
+  // that way status keeps parsing regardless of which endpoint served it.
+  static const String switchGo = 'switch_go'; // bool: start/stop cleaning
+  static const String powerGoV1 = 'power_go'; // v1 alias of switch_go
   static const String pause = 'pause'; // bool: true = paused in place
   static const String switchCharge = 'switch_charge'; // bool: true = return to dock
-  static const String mode = 'mode'; // enum: smart | zone | pose
+  static const String mode = 'mode'; // enum: smart|goto_charge|zone|pose|select_room|manual|quick_mapping
   static const String customizeModeSwitch = 'customize_mode_switch'; // bool
-  static const String suction = 'suction'; // enum: gentle | normal | strong (only 3 levels)
+  static const String suction = 'suction'; // enum: closed | gentle | normal | strong | max
   static const String breakClean = 'break_clean'; // bool
   static const String cleanTime = 'clean_time'; // integer, read-only, minutes this session
   static const String cleanArea = 'clean_area'; // integer, read-only, sq meters this session
-  static const String edgeBrush = 'edge_brush'; // integer, side brush remaining life
-  static const String rollBrush = 'roll_brush'; // integer, main brush remaining life
-  static const String filter = 'filter'; // integer, filter remaining life
-  static const String electricityLeft = 'electricity_left'; // integer 0-100, battery (NOT battery_percentage)
   static const String volumeSet = 'volume_set'; // integer 0-100
-  static const String direction = 'direction_control'; // enum: forward | turn_left | turn_right | stop (NO backward)
+  static const String direction = 'direction_control'; // enum: forward|turn_left|turn_right|stop (no reverse)
   static const String seek = 'seek'; // bool, find-my-robot chime
-  static const String status = 'status'; // read-only string enum, full range not confirmed
+  static const String status = 'status'; // read-only enum, 28 values in the real model
+
+  // Consumable life. v1 exposes these without the `_life` suffix.
+  static const String edgeBrushLife = 'edge_brush_life';
+  static const String edgeBrushV1 = 'edge_brush';
+  static const String rollBrushLife = 'roll_brush_life';
+  static const String rollBrushV1 = 'roll_brush';
+  static const String filterLife = 'filter_life';
+  static const String filterV1 = 'filter';
+  static const String mopLife = 'mop_life'; // only present in the v2 model
+
+  static const String batteryPercentage = 'battery_percentage';
+  static const String electricityLeftV1 = 'electricity_left'; // v1 alias
+
+  // Only exposed by the v2.0 thing model — absent from v1.x entirely.
+  static const String mopState = 'mop_state'; // enum: none | installed
+  static const String waterOutput = 'water_output'; // enum: closed | low | middle | high
+  static const String sweepMopMode = 'sweep_mop_mode'; // enum: only_sweep|only_mop|both_work|clean_before_mop
+
+  /// Raw fault bitmap. Per the device model: hex, one byte per active
+  /// fault (e.g. `0102041E` = faults 1, 2, 4 and 30 at once); `00` means
+  /// no fault / fault cleared. Delivered base64-encoded over the API.
+  static const String totalError = 'total_error';
+}
+
+/// One active fault reported via [TuyaDpCodes.totalError].
+///
+/// The device transmits fault *numbers* only — the number→meaning mapping
+/// lives in Tuya's per-product panel translations, not in the thing model,
+/// so it is not derivable from the API. Codes confirmed by observing the
+/// real robot are named here; anything else is surfaced by number rather
+/// than guessed at.
+class TuyaFault {
+  const TuyaFault(this.code);
+
+  final int code;
+
+  String get description => 'Fault code $code';
+
+  @override
+  bool operator ==(Object other) => other is TuyaFault && other.code == code;
+
+  @override
+  int get hashCode => code.hashCode;
 }
 
 class TuyaCommand {
@@ -50,7 +100,7 @@ abstract final class TuyaWireProtocol {
     return switch (command) {
       StartCleaningCommand(:final mode) => [
           [TuyaCommand(TuyaDpCodes.mode, _encodeCleaningMode(mode))],
-          [const TuyaCommand(TuyaDpCodes.powerGo, true)],
+          [const TuyaCommand(TuyaDpCodes.powerGoV1, true)],
         ],
       ResumeCleaningCommand() => [
           [const TuyaCommand(TuyaDpCodes.pause, false)],
@@ -59,30 +109,30 @@ abstract final class TuyaWireProtocol {
           [const TuyaCommand(TuyaDpCodes.pause, true)],
         ],
       StopCleaningCommand() => [
-          [const TuyaCommand(TuyaDpCodes.powerGo, false)],
+          [const TuyaCommand(TuyaDpCodes.powerGoV1, false)],
         ],
       ReturnToDockCommand() => [
           [const TuyaCommand(TuyaDpCodes.switchCharge, true)],
         ],
       SpotCleanCommand() => [
           [const TuyaCommand(TuyaDpCodes.mode, 'pose')],
-          [const TuyaCommand(TuyaDpCodes.powerGo, true)],
+          [const TuyaCommand(TuyaDpCodes.powerGoV1, true)],
         ],
       // This device's `mode` enum (smart/zone/pose) has no per-room
       // selection — room picking is app/map-side only, so this falls back
       // to a full smart clean.
       RoomCleanCommand() => [
           [const TuyaCommand(TuyaDpCodes.mode, 'smart')],
-          [const TuyaCommand(TuyaDpCodes.powerGo, true)],
+          [const TuyaCommand(TuyaDpCodes.powerGoV1, true)],
         ],
       ZoneCleanCommand() => [
           [const TuyaCommand(TuyaDpCodes.mode, 'zone')],
-          [const TuyaCommand(TuyaDpCodes.powerGo, true)],
+          [const TuyaCommand(TuyaDpCodes.powerGoV1, true)],
         ],
-      // No water/mop DP on this device — waterFlow is dropped.
-      CustomCleanCommand(:final power) => [
+      CustomCleanCommand(:final power, :final waterFlow) => [
           [TuyaCommand(TuyaDpCodes.suction, _encodeSuction(power))],
-          [const TuyaCommand(TuyaDpCodes.powerGo, true)],
+          [TuyaCommand(TuyaDpCodes.waterOutput, _encodeWaterOutput(waterFlow))],
+          [const TuyaCommand(TuyaDpCodes.powerGoV1, true)],
         ],
       SetVacuumPowerCommand(:final power) => [
           [TuyaCommand(TuyaDpCodes.suction, _encodeSuction(power))],
@@ -96,9 +146,13 @@ abstract final class TuyaWireProtocol {
       DriveCommand(:final linear, :final angular) => [
           [TuyaCommand(TuyaDpCodes.direction, _encodeDirection(linear, angular))],
         ],
-      // No mop/water DP, no child-lock DP, and manual motor/pump/LED/room-
-      // naming controls aren't part of this device's schema at all.
-      SetWaterLevelCommand() ||
+      // This robot DOES have a mop/water system — `water_output` is in its
+      // real thing model, even though Tuya's v1.x specification omits it.
+      SetWaterLevelCommand(:final level) => [
+          [TuyaCommand(TuyaDpCodes.waterOutput, _encodeWaterOutput(level))],
+        ],
+      // No child-lock DP, and manual motor/pump/LED/room-naming controls
+      // aren't part of this device's schema at all.
       SetChildLockCommand() ||
       StartOtaCommand() ||
       RestartRobotCommand() ||
@@ -122,13 +176,16 @@ abstract final class TuyaWireProtocol {
     bool? pause;
     bool? switchCharge;
     String? statusStr;
+    bool? isMopAttached;
+    List<TuyaFault> faults = const [];
 
     for (final Map<String, dynamic> point in points) {
       final String code = point['code'] as String;
       final Object? value = point['value'];
 
       switch (code) {
-        case TuyaDpCodes.electricityLeft:
+        case TuyaDpCodes.batteryPercentage:
+        case TuyaDpCodes.electricityLeftV1:
           status = status.copyWith(batteryPercent: (value! as num) / 100.0);
         case TuyaDpCodes.cleanArea:
           status = status.copyWith(areaCleanedSqm: (value! as num).toDouble());
@@ -136,19 +193,33 @@ abstract final class TuyaWireProtocol {
           status = status.copyWith(cleaningElapsed: Duration(minutes: value! as int));
         case TuyaDpCodes.suction:
           status = status.copyWith(vacuumPower: _decodeSuction(value! as String));
-        case TuyaDpCodes.rollBrush:
+        case TuyaDpCodes.waterOutput:
+          status = status.copyWith(waterFlow: _decodeWaterOutput(value! as String));
+        case TuyaDpCodes.rollBrushLife:
+        case TuyaDpCodes.rollBrushV1:
           status = status.copyWith(
             consumables: _updateConsumable(status.consumables, ConsumableType.mainBrush, value! as num),
           );
-        case TuyaDpCodes.edgeBrush:
+        case TuyaDpCodes.edgeBrushLife:
+        case TuyaDpCodes.edgeBrushV1:
           status = status.copyWith(
             consumables: _updateConsumable(status.consumables, ConsumableType.sideBrush, value! as num),
           );
-        case TuyaDpCodes.filter:
+        case TuyaDpCodes.filterLife:
+        case TuyaDpCodes.filterV1:
           status = status.copyWith(
             consumables: _updateConsumable(status.consumables, ConsumableType.filter, value! as num),
           );
-        case TuyaDpCodes.powerGo:
+        case TuyaDpCodes.mopLife:
+          status = status.copyWith(
+            consumables: _updateConsumable(status.consumables, ConsumableType.mopPad, value! as num),
+          );
+        case TuyaDpCodes.mopState:
+          isMopAttached = value == 'installed';
+        case TuyaDpCodes.totalError:
+          faults = decodeTotalError(value as String?);
+        case TuyaDpCodes.switchGo:
+        case TuyaDpCodes.powerGoV1:
           powerGo = value! as bool;
         case TuyaDpCodes.pause:
           pause = value! as bool;
@@ -166,15 +237,23 @@ abstract final class TuyaWireProtocol {
       statusStr: statusStr,
       previous: status.activity,
     );
+    if (isMopAttached != null) {
+      status = status.copyWith(isMopAttached: isMopAttached);
+    }
+
+    // `total_error` is the authoritative fault source — it carries the
+    // actual fault numbers. `status: "fault"` only says *that* something
+    // is wrong, so it's the fallback when the bitmap isn't present.
+    final bool hasFault = faults.isNotEmpty || resolvedActivity == ActivityState.error;
+    status = status.copyWith(
+      faultCodes: faults.map((TuyaFault f) => f.code).toList(),
+      activeErrors: hasFault ? const [RobotErrorCode.needsAttention] : const [],
+    );
+
     if (resolvedActivity != null) {
       status = status.copyWith(
         activity: resolvedActivity,
         isCharging: resolvedActivity == ActivityState.charging || resolvedActivity == ActivityState.docked,
-        // This device reports faults only as a bare `status: "fault"` with
-        // no accompanying fault code, so the specific cause genuinely
-        // isn't knowable from the API — surface it as `unknown` rather
-        // than inventing a more specific-sounding reason.
-        activeErrors: resolvedActivity == ActivityState.error ? const [RobotErrorCode.unknown] : const [],
       );
     }
 
@@ -282,6 +361,41 @@ abstract final class TuyaWireProtocol {
         CleaningMode.zone => 'zone',
         CleaningMode.spot => 'pose',
         CleaningMode.custom => 'smart',
+      };
+
+  /// Decodes the `total_error` DP into the active fault numbers.
+  ///
+  /// Per the device's own thing-model definition: hexadecimal, one byte
+  /// per active fault (`0102041E` = faults 1, 2, 4 and 30 simultaneously),
+  /// `00` = no fault / fault cleared. Tuya delivers the raw bytes
+  /// base64-encoded over the API.
+  static List<TuyaFault> decodeTotalError(String? base64Value) {
+    if (base64Value == null || base64Value.isEmpty) return const [];
+
+    List<int> bytes;
+    try {
+      bytes = base64Decode(base64Value);
+    } on FormatException {
+      return const [];
+    }
+
+    // Zero bytes are padding / the explicit "no fault" marker.
+    return bytes.where((int b) => b != 0).map(TuyaFault.new).toList();
+  }
+
+  static WaterFlow _decodeWaterOutput(String value) => switch (value) {
+        'closed' => WaterFlow.off,
+        'low' => WaterFlow.low,
+        'middle' => WaterFlow.medium,
+        'high' => WaterFlow.high,
+        _ => WaterFlow.off,
+      };
+
+  static String _encodeWaterOutput(WaterFlow flow) => switch (flow) {
+        WaterFlow.off => 'closed',
+        WaterFlow.low => 'low',
+        WaterFlow.medium => 'middle',
+        WaterFlow.high || WaterFlow.ultra => 'high',
       };
 
   static String _encodeSuction(VacuumPower power) => switch (power) {

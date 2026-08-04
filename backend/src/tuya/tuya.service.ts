@@ -130,11 +130,27 @@ export class TuyaService {
   /// link needed. `listDevices`/the account-link flow above stays in place
   /// for the separate case of a user connecting their own pre-existing
   /// Tuya-ecosystem device.
+  /// Reads status from Tuya's v2.0 "thing shadow", NOT the v1.x
+  /// `/devices/{id}/status` endpoint.
+  ///
+  /// This matters a lot: v1.x exposes only the device's *standard
+  /// instruction set* — 17 DPs for this robot — and renames some of them
+  /// (`switch_go` -> `power_go`, `battery_percentage` -> `electricity_left`).
+  /// The v2.0 shadow returns the device's real, complete model: 37 DPs,
+  /// including ones v1.x hides entirely — `total_error` (the fault
+  /// bitmask), `mop_state`, `water_output`, `sweep_mop_mode`, `mop_life`
+  /// and the wash/dry/dust-collection controls.
+  ///
+  /// Normalised to the same `{code, value}` shape v1.x returned so callers
+  /// don't care which endpoint it came from.
   async getDeviceStatus(deviceId: string): Promise<TuyaDeviceStatusPoint[]> {
-    return this.client.request<TuyaDeviceStatusPoint[]>({
+    const shadow = await this.client.request<{
+      properties: Array<{ code: string; value: unknown; dp_id: number; type: string }>;
+    }>({
       method: 'GET',
-      path: `/v1.0/devices/${deviceId}/status`,
+      path: `/v2.0/cloud/thing/${deviceId}/shadow/properties`,
     });
+    return (shadow.properties ?? []).map((p) => ({ code: p.code, value: p.value }));
   }
 
   async getDeviceFunctions(deviceId: string): Promise<TuyaDeviceFunction[]> {

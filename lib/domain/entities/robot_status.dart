@@ -42,6 +42,8 @@ class RobotStatus extends Equatable {
     required this.consumables,
     required this.activeErrors,
     required this.isChildLockOn,
+    required this.isMopAttached,
+    required this.faultCodes,
     required this.lastUpdated,
   });
 
@@ -68,6 +70,8 @@ class RobotStatus extends Equatable {
       consumables: const [],
       activeErrors: const [],
       isChildLockOn: false,
+      isMopAttached: false,
+      faultCodes: const [],
       lastUpdated: DateTime.fromMillisecondsSinceEpoch(0),
     );
   }
@@ -103,6 +107,17 @@ class RobotStatus extends Equatable {
   final List<Consumable> consumables;
   final List<RobotErrorCode> activeErrors;
   final bool isChildLockOn;
+
+  /// Whether the mop pad is currently fitted, from the robot's `mop_state`
+  /// data point. False when the robot doesn't report one at all.
+  final bool isMopAttached;
+
+  /// Active fault numbers exactly as the robot reported them via its
+  /// `total_error` bitmap. The number-to-meaning mapping lives in the
+  /// vendor's panel translations rather than any API, so these stay as
+  /// numbers unless confirmed against the real device.
+  final List<int> faultCodes;
+
   final DateTime lastUpdated;
 
   bool get isOnline => connection == RobotConnectionState.connected;
@@ -131,6 +146,8 @@ class RobotStatus extends Equatable {
     List<Consumable>? consumables,
     List<RobotErrorCode>? activeErrors,
     bool? isChildLockOn,
+    bool? isMopAttached,
+    List<int>? faultCodes,
     DateTime? lastUpdated,
     bool clearCurrentRoom = false,
     bool clearCurrentTask = false,
@@ -157,6 +174,8 @@ class RobotStatus extends Equatable {
       consumables: consumables ?? this.consumables,
       activeErrors: activeErrors ?? this.activeErrors,
       isChildLockOn: isChildLockOn ?? this.isChildLockOn,
+      isMopAttached: isMopAttached ?? this.isMopAttached,
+      faultCodes: faultCodes ?? this.faultCodes,
       lastUpdated: lastUpdated ?? this.lastUpdated,
     );
   }
@@ -184,6 +203,8 @@ class RobotStatus extends Equatable {
         consumables,
         activeErrors,
         isChildLockOn,
+        isMopAttached,
+        faultCodes,
         lastUpdated,
       ];
 }

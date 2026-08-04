@@ -45,6 +45,15 @@ enum RobotErrorCode {
   cliffSensorBlocked,
   unableToReturnToDock,
   firmwareUpdateFailed,
+
+  /// The robot has raised a fault but did not report *which* fault.
+  /// Distinct from [unknown] (an unrecognised/unparseable code): here the
+  /// fault is genuine and confirmed, the cause simply isn't transmitted.
+  /// Tuya-connected robots like the Milagrow W300 report a bare
+  /// `status: "fault"` with no accompanying fault code — verified against
+  /// the device's full DP specification and its event logs.
+  needsAttention,
+
   unknown,
 }
 
@@ -64,6 +73,8 @@ extension RobotErrorCodeMessage on RobotErrorCode {
         RobotErrorCode.cliffSensorBlocked => 'Cliff sensor is blocked',
         RobotErrorCode.unableToReturnToDock => 'Unable to find the way back to dock',
         RobotErrorCode.firmwareUpdateFailed => 'Firmware update failed',
+        RobotErrorCode.needsAttention =>
+          'Robot needs attention — check the dust bin, water tank, brushes, or whether it is stuck',
         RobotErrorCode.unknown => 'An unknown error occurred',
       };
 }
