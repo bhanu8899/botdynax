@@ -103,6 +103,13 @@ model Schedule {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  /// Set once this schedule has been pushed to a real Tuya device timer
+  /// (see SchedulesService). Null for robots with no tuyaDeviceId linked,
+  /// or if the push failed — the schedule still works as an in-app
+  /// reminder either way, this just tracks whether the robot itself will
+  /// also fire it on its own.
+  tuyaTimerId  String?
+
   @@index([robotId])
 }
 

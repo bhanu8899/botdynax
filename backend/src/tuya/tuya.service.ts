@@ -27,6 +27,19 @@ export interface TuyaDeviceFunction {
   values: string;
 }
 
+export interface TuyaTimerFunction {
+  code: string;
+  value: unknown;
+}
+
+export interface CreateTuyaTimerParams {
+  aliasName: string;
+  time: string;
+  timezoneId: string;
+  loops: string;
+  functions: TuyaTimerFunction[];
+}
+
 interface TuyaUserTokenResponse {
   access_token: string;
   refresh_token: string;
@@ -161,14 +174,69 @@ export class TuyaService {
     return result.functions;
   }
 
+  /// Issues DP writes via the v2.0 "thing shadow" endpoint, NOT the v1.x
+  /// `/devices/{id}/commands` endpoint.
+  ///
+  /// This was a real bug, confirmed live: v1.x's `/commands` only accepts
+  /// the device's 10-DP *standard instruction set* and silently rejects
+  /// anything from the real v2.0 model with `2008 command or value not
+  /// support` — which is every DP the Station/Preferences/Carpet features
+  /// added (`manual_dust_collection`, `wash`, `sweep_mop_mode`,
+  /// `carpet_clean_prefer`, `auto_dust_collection`, `auto_air`, etc.).
+  /// Verified the v2.0 endpoint handles both the original standard DPs
+  /// and the v2-only ones identically, including multiple properties in
+  /// one call, so this is a full replacement, not a partial one.
   async sendCommands(deviceId: string, commands: TuyaDeviceStatusPoint[]): Promise<void> {
     if (commands.length === 0) {
       throw new BadRequestException('At least one command is required');
     }
-    await this.client.request<{ success: boolean }>({
+    const properties = Object.fromEntries(commands.map((c) => [c.code, c.value]));
+    await this.client.request<Record<string, never>>({
       method: 'POST',
-      path: `/v1.0/devices/${deviceId}/commands`,
-      body: { commands },
+      path: `/v2.0/cloud/thing/${deviceId}/shadow/properties/issue`,
+      body: { properties: JSON.stringify(properties) },
+    });
+  }
+
+  /// Device-side scheduling via Tuya's Device Timer service.
+  ///
+  /// Confirmed live against the real robot (create → list → delete, then
+  /// verified the list came back empty). Two things the docs get wrong in
+  /// practice for this device:
+  ///  - `category` is documented optional but is REQUIRED — omitting it
+  ///    produces a misleading "alias_name param is illegal" error that has
+  ///    nothing to do with alias_name.
+  ///  - `functions[].code` must be the device's real v2.0 DP name
+  ///    (`switch_go`), not the v1.x standard-instruction-set alias
+  ///    (`power_go`) — the v1 alias is rejected with
+  ///    "function is not exists".
+  async createTimer(deviceId: string, params: CreateTuyaTimerParams): Promise<string> {
+    const result = await this.client.request<{ timer_id?: string; time_id?: string }>({
+      method: 'POST',
+      path: `/v2.0/cloud/timer/device/${deviceId}`,
+      body: {
+        alias_name: params.aliasName,
+        time: params.time,
+        timezone_id: params.timezoneId,
+        loops: params.loops,
+        category: 'sd',
+        functions: params.functions.map((f) => ({ code: f.code, value: f.value })),
+      },
+    });
+    // Tuya's own reference docs disagree on the field name (return-params
+    // table says time_id, the sample response says timer_id) — accept
+    // either rather than trusting one.
+    const timerId = result.timer_id ?? result.time_id;
+    if (!timerId) {
+      throw new Error('Tuya timer creation succeeded but returned no timer id');
+    }
+    return timerId;
+  }
+
+  async deleteTimer(deviceId: string, timerId: string): Promise<void> {
+    await this.client.request<{ success: boolean }>({
+      method: 'DELETE',
+      path: `/v2.0/cloud/timer/device/${deviceId}/batch?timer_ids=${timerId}`,
     });
   }
 
