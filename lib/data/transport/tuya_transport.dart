@@ -33,6 +33,14 @@ class TuyaTransport implements RobotTransport {
   RobotStatus _lastStatus = RobotStatus.initial('unknown', 'BotDyNax Robot (Tuya)');
   final CleaningMap _lastMap = CleaningMap.empty('unknown');
 
+  /// Battery level captured when a cleaning session was last detected
+  /// starting, so [CleaningCompletedEvent.batteryUsedPercent] can report
+  /// real consumption rather than a guess.
+  double? _sessionStartBattery;
+
+  /// Fault messages observed at any point during the current session.
+  final Set<String> _sessionErrors = {};
+
   final StreamController<RobotStatus> _statusController = StreamController<RobotStatus>.broadcast();
   final StreamController<RobotEvent> _eventController = StreamController<RobotEvent>.broadcast();
 
@@ -86,15 +94,57 @@ class TuyaTransport implements RobotTransport {
           (response.data ?? const []).cast<Map<String, dynamic>>();
 
       final bool hadFault = _lastStatus.hasErrors;
+      final ActivityState previousActivity = _lastStatus.activity;
       _lastStatus = TuyaWireProtocol.decodeStatus(points, _lastStatus);
       _statusController.add(_lastStatus);
 
       if (!hadFault && _lastStatus.hasErrors) {
         _eventController.add(const RobotErrorEvent(RobotErrorCode.unknown));
       }
+      _trackSession(previousActivity, _lastStatus);
     } on DioException {
       _lastStatus = _lastStatus.copyWith(connection: RobotConnectionState.reconnecting);
       _statusController.add(_lastStatus);
+    }
+  }
+
+  static bool _isSessionActive(ActivityState activity) =>
+      activity == ActivityState.cleaning ||
+      activity == ActivityState.paused ||
+      activity == ActivityState.returningToDock;
+
+  /// Detects a cleaning session's start/end purely from [ActivityState]
+  /// transitions in the polled status (there's no dedicated Tuya DP or
+  /// push event for this), and emits [CleaningStartedEvent] /
+  /// [CleaningCompletedEvent] carrying real numbers: `clean_time`/
+  /// `clean_area` are the device's own per-session counters (reset by the
+  /// robot each run, not tracked client-side), and battery-used is the
+  /// delta from the level captured at session start.
+  void _trackSession(ActivityState previousActivity, RobotStatus status) {
+    final bool wasActive = _isSessionActive(previousActivity);
+    final bool isActive = _isSessionActive(status.activity);
+
+    if (!wasActive && isActive) {
+      _sessionStartBattery = status.batteryPercent;
+      _sessionErrors.clear();
+      _eventController.add(const CleaningStartedEvent());
+    }
+
+    if (isActive && status.faultMessages.isNotEmpty) {
+      _sessionErrors.addAll(status.faultMessages);
+    }
+
+    if (wasActive && !isActive) {
+      final double startBattery = _sessionStartBattery ?? status.batteryPercent;
+      _eventController.add(
+        CleaningCompletedEvent(
+          areaCleanedSqm: status.areaCleanedSqm,
+          duration: status.cleaningElapsed,
+          batteryUsedPercent: ((startBattery - status.batteryPercent) * 100).clamp(0, 100),
+          errors: _sessionErrors.toList(),
+        ),
+      );
+      _sessionStartBattery = null;
     }
   }
 

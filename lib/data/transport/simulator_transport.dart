@@ -323,7 +323,14 @@ class SimulatorTransport implements RobotTransport {
         batteryPercent: battery,
       );
       _eventController.add(
-        CleaningCompletedEvent(areaCleanedSqm: _status.areaCleanedSqm, duration: _status.cleaningElapsed),
+        CleaningCompletedEvent(
+          areaCleanedSqm: _status.areaCleanedSqm,
+          duration: _status.cleaningElapsed,
+          // Simulator doesn't model battery drain per-session distinctly
+          // from the ongoing level, or fault injection during a run.
+          batteryUsedPercent: 0,
+          errors: const [],
+        ),
       );
       return;
     }

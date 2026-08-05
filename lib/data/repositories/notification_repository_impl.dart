@@ -15,6 +15,18 @@ const Map<String, NotificationType> _backendTypeMap = {
   'FIRMWARE_AVAILABLE': NotificationType.firmwareAvailable,
 };
 
+const Map<NotificationType, String> _appToBackendType = {
+  NotificationType.cleaningStarted: 'CLEANING_STARTED',
+  NotificationType.cleaningCompleted: 'CLEANING_COMPLETED',
+  NotificationType.lowBattery: 'LOW_BATTERY',
+  NotificationType.brushReplacement: 'BRUSH_REPLACEMENT',
+  NotificationType.filterReplacement: 'FILTER_REPLACEMENT',
+  NotificationType.waterEmpty: 'WATER_EMPTY',
+  NotificationType.dustBinFull: 'DUST_BIN_FULL',
+  NotificationType.robotOffline: 'ROBOT_OFFLINE',
+  NotificationType.firmwareAvailable: 'FIRMWARE_AVAILABLE',
+};
+
 class NotificationRepositoryImpl implements NotificationRepository {
   NotificationRepositoryImpl({required this._dio});
 
@@ -26,6 +38,14 @@ class NotificationRepositoryImpl implements NotificationRepository {
     return (response.data ?? const [])
         .map((dynamic json) => _fromJson(json as Map<String, dynamic>))
         .toList();
+  }
+
+  @override
+  Future<void> create({required NotificationType type, required String message, String? robotId}) async {
+    await _dio.post<void>(
+      '/notifications',
+      data: {'type': _appToBackendType[type], 'message': message, if (robotId != null) 'robotId': robotId},
+    );
   }
 
   @override

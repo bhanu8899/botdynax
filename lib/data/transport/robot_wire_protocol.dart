@@ -144,6 +144,8 @@ abstract final class RobotWireProtocol {
       'cleaning_completed' => CleaningCompletedEvent(
           areaCleanedSqm: (json['area_sqm'] as num).toDouble(),
           duration: Duration(seconds: json['duration_s'] as int),
+          batteryUsedPercent: (json['battery_used_percent'] as num?)?.toDouble() ?? 0,
+          errors: (json['errors'] as List<dynamic>?)?.cast<String>() ?? const [],
         ),
       'error' => RobotErrorEvent(RobotErrorCode.values.byName(json['code'] as String)),
       'firmware_available' => FirmwareUpdateAvailableEvent(json['version'] as String),

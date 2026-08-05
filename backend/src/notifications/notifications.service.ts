@@ -14,8 +14,8 @@ export class NotificationsService {
     });
   }
 
-  /// Called internally (e.g. by the MQTT bridge on robot-pushed events) to
-  /// record a notification for a user — not exposed as a public endpoint.
+  /// Called via POST /notifications (client-detected events) or internally
+  /// by the MQTT bridge for firmware that pushes events server-side.
   create(userId: string, type: NotificationType, message: string, robotId?: string) {
     return this.prisma.notification.create({ data: { userId, type, message, robotId } });
   }

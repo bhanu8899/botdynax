@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -13,10 +14,12 @@ import '../../core/widgets/bd_buttons.dart';
 import '../../core/widgets/glass_card.dart';
 import '../../core/widgets/skeleton_loader.dart';
 import '../../core/widgets/status_pill.dart';
+import '../../domain/entities/app_notification.dart';
 import '../../domain/entities/consumable.dart';
 import '../../domain/entities/robot_enums.dart';
 import '../../domain/entities/robot_status.dart';
 import '../../domain/transport/robot_transport.dart';
+import '../providers/cloud_providers.dart';
 import '../providers/robot_providers.dart';
 import 'widgets/consumable_tile.dart';
 import 'widgets/robot_illustration.dart';
@@ -64,6 +67,60 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     };
 
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+
+    switch (event) {
+      case CleaningStartedEvent():
+        unawaited(HapticFeedback.lightImpact());
+      case CleaningCompletedEvent():
+        unawaited(HapticFeedback.mediumImpact());
+      case RobotErrorEvent():
+        unawaited(HapticFeedback.heavyImpact());
+      case FirmwareUpdateAvailableEvent():
+        unawaited(HapticFeedback.selectionClick());
+    }
+
+    unawaited(_persistEvent(event, message));
+  }
+
+  /// Persists cleaning-session history and notification records for real
+  /// events. The backend has no server-side link to the Tuya device (all
+  /// polling happens client-side in [TuyaTransport]), so this app is the
+  /// one place that ever detects these — without this, both the History
+  /// screen and Notifications screen stay permanently empty regardless of
+  /// how much the robot actually runs.
+  Future<void> _persistEvent(RobotEvent event, String message) async {
+    final String? robotId = ref.read(backendRobotIdProvider).valueOrNull;
+    if (robotId == null) return;
+
+    try {
+      if (event is CleaningCompletedEvent) {
+        await ref.read(historyRepositoryProvider).record(
+              robotId: robotId,
+              areaCleanedSqm: event.areaCleanedSqm,
+              durationSeconds: event.duration.inSeconds,
+              batteryUsedPercent: event.batteryUsedPercent,
+              errors: event.errors,
+            );
+      }
+
+      // RobotErrorEvent has no matching NotificationType (it's a generic
+      // "something is wrong" signal, not specifically low-battery/dust-bin
+      // /water-empty) — persisting it under one of those would misreport
+      // the actual cause, so it's surfaced via the SnackBar/haptic above
+      // only, not stored as a notification record.
+      final NotificationType? type = switch (event) {
+        CleaningStartedEvent() => NotificationType.cleaningStarted,
+        CleaningCompletedEvent() => NotificationType.cleaningCompleted,
+        FirmwareUpdateAvailableEvent() => NotificationType.firmwareAvailable,
+        RobotErrorEvent() => null,
+      };
+      if (type != null) {
+        await ref.read(notificationRepositoryProvider).create(type: type, message: message, robotId: robotId);
+      }
+    } catch (_) {
+      // Best-effort: the event still reached the user via SnackBar/haptic
+      // above even if persisting the record failed (e.g. offline).
+    }
   }
 
   @override

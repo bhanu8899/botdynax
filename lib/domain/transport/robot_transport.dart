@@ -28,9 +28,21 @@ class CleaningStartedEvent extends RobotEvent {
 }
 
 class CleaningCompletedEvent extends RobotEvent {
-  const CleaningCompletedEvent({required this.areaCleanedSqm, required this.duration});
+  const CleaningCompletedEvent({
+    required this.areaCleanedSqm,
+    required this.duration,
+    required this.batteryUsedPercent,
+    required this.errors,
+  });
   final double areaCleanedSqm;
   final Duration duration;
+
+  /// Battery percentage points consumed over the session (start - end). 0
+  /// when the transport has no way to know the starting battery level.
+  final double batteryUsedPercent;
+
+  /// Fault messages observed at any point during the session.
+  final List<String> errors;
 }
 
 class RobotErrorEvent extends RobotEvent {
