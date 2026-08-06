@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  model_viewer_plus embeds Google's <model-viewer> in a WebView, which
+  loads the .glb asset from a tiny local HTTP server it spins up on
+  localhost — that's plain HTTP, never seen outside the device, but
+  Android 9+ blocks all cleartext traffic by default (ERR_CLEARTEXT_NOT_
+  PERMITTED). Scoping the exception to 127.0.0.1/localhost/10.0.2.2 (the
+  emulator's loopback alias) keeps every real network request — the
+  Render backend, Tuya, everything else — on HTTPS-only.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>
