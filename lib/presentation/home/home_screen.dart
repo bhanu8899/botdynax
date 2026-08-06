@@ -22,7 +22,7 @@ import '../../domain/transport/robot_transport.dart';
 import '../providers/cloud_providers.dart';
 import '../providers/robot_providers.dart';
 import 'widgets/consumable_tile.dart';
-import 'widgets/robot_illustration.dart';
+import 'widgets/robot_model_3d.dart';
 import 'widgets/signal_indicator.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -230,7 +230,7 @@ class _DashboardView extends ConsumerWidget {
       children: [
         _Header(status: status),
         const SizedBox(height: AppSpacing.lg),
-        Center(child: RobotIllustration(status: status)),
+        RobotModel3D(status: status),
         const SizedBox(height: AppSpacing.sm),
         Center(
           child: Text(_activityLabel(status.activity), style: theme.textTheme.headlineSmall),
