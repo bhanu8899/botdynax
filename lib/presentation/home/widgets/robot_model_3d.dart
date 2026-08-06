@@ -5,6 +5,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:model_viewer_plus/model_viewer_plus.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../../../core/widgets/brand_logo.dart';
 import '../../../domain/entities/robot_enums.dart';
 import '../../../domain/entities/robot_status.dart';
 import 'robot_illustration.dart';
@@ -44,6 +45,15 @@ const String _robotOnlyPath = 'assets/models/robot_only.glb';
 ///
 /// Falls back to the 2D [RobotIllustration] rather than crashing if
 /// either asset hasn't been added yet.
+///
+/// The source asset had a raised "xiaomi" wordmark embossed into the top
+/// shell (real geometry, not a texture — confirmed via
+/// `model-viewer.materialFromPoint()` raycasting on the actual rendered
+/// pixels, which identified it as its own material/mesh, isolated to
+/// exactly those six letters and nothing else). That mesh has been
+/// deleted from both .glb files; a small [BrandLogo] watermark is
+/// composited on top of the viewer instead, since there's no texture
+/// system in this model to bake a replacement decal into the geometry.
 class RobotModel3D extends StatefulWidget {
   const RobotModel3D({required this.status, super.key, this.height = 260});
 
@@ -197,22 +207,35 @@ class _RobotModel3DState extends State<RobotModel3D> {
             return Center(child: RobotIllustration(status: widget.status));
           }
           final String src = _currentSrc;
-          return ModelViewer(
-            key: ValueKey(src),
-            src: src,
-            alt: 'BotDyNax robot vacuum 3D model',
-            backgroundColor: Colors.transparent,
-            autoRotate: widget.status.activity == ActivityState.cleaning,
-            rotationPerSecond: widget.status.activity == ActivityState.cleaning ? '60deg' : '8deg',
-            cameraControls: true,
-            disableZoom: true,
-            shadowIntensity: 0.6,
-            exposure: 1.0,
-            debugLogging: false,
-            onWebViewCreated: (WebViewController controller) {
-              _webViewController = controller;
-              _applySceneState();
-            },
+          return Stack(
+            children: [
+              ModelViewer(
+                key: ValueKey(src),
+                src: src,
+                alt: 'BotDyNax robot vacuum 3D model',
+                backgroundColor: Colors.transparent,
+                autoRotate: widget.status.activity == ActivityState.cleaning,
+                rotationPerSecond: widget.status.activity == ActivityState.cleaning ? '60deg' : '8deg',
+                cameraControls: true,
+                disableZoom: true,
+                shadowIntensity: 0.6,
+                exposure: 1.0,
+                debugLogging: false,
+                onWebViewCreated: (WebViewController controller) {
+                  _webViewController = controller;
+                  _applySceneState();
+                },
+              ),
+              // Where the source model's "xiaomi" mesh used to sit
+              // (now deleted) — a flat UI overlay rather than baked-in
+              // geometry, since this model has no texture system to
+              // stamp a replacement decal into.
+              const Positioned(
+                top: 8,
+                right: 8,
+                child: Opacity(opacity: 0.85, child: BrandLogo(height: 18)),
+              ),
+            ],
           );
         },
       ),

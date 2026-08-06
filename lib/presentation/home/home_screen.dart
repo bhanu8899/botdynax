@@ -350,21 +350,12 @@ class _DashboardView extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: AppSpacing.sm),
-        // Deliberately NOT dust-bin / water-tank fill percentages: this
-        // robot has no DP for either, so those tiles could only ever show
-        // a hardcoded 0%. These two are real — `water_output` and the
-        // mop-pad fault code both come straight off the device.
-        Row(
-          children: [
-            Expanded(child: _MiniStat(label: 'Water Level', value: _waterLabel(status.waterFlow))),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: _MiniStat(
-                label: 'Mop Pads',
-                value: status.faultCodes.contains(21) ? 'Removed' : 'Fitted',
-              ),
-            ),
-          ],
+        // Deliberately not a dust-bin fill percentage: this robot has no
+        // DP for it, so that tile could only ever show a hardcoded 0%.
+        // Mop Pads is real — driven by the confirmed mop-pad fault code.
+        _MiniStat(
+          label: 'Mop Pads',
+          value: status.faultCodes.contains(21) ? 'Removed' : 'Fitted',
         ),
         if (status.consumables.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.lg),
@@ -388,13 +379,6 @@ class _DashboardView extends ConsumerWidget {
       ],
     );
   }
-
-  String _waterLabel(WaterFlow flow) => switch (flow) {
-        WaterFlow.off => 'Off',
-        WaterFlow.low => 'Low',
-        WaterFlow.medium => 'Medium',
-        WaterFlow.high || WaterFlow.ultra => 'High',
-      };
 
   String _activityLabel(ActivityState activity) => switch (activity) {
         ActivityState.idle => 'Idle',
@@ -501,7 +485,11 @@ class _Header extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('Good day', style: theme.textTheme.bodyMedium),
-              Text(status.name, style: theme.textTheme.displaySmall),
+              // Branded app-level name rather than the raw Tuya device
+              // name (status.name is just whatever the device happens to
+              // be labeled as, e.g. "iMap Max W300" -- still shown as-is
+              // in Settings > Robot for the actual device identity).
+              Text('BotDyNax (Milagrow W300)', style: theme.textTheme.displaySmall),
             ],
           ),
         ),
