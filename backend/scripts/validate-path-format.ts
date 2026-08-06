@@ -15,7 +15,7 @@ import axios from 'axios';
 
 import { signTuyaRequest } from '../src/tuya/tuya-signature.util';
 
-const DEVICE_ID = 'd784c044cd0ee1361f329a';
+const DEVICE_ID = 'd7ae521a982d49fbc4ikal';
 
 function loadDotEnv(): void {
   const content = readFileSync(join(__dirname, '..', '.env'), 'utf8');

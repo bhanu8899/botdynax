@@ -6,9 +6,9 @@ import '../../domain/entities/robot_enums.dart';
 import '../../domain/entities/robot_status.dart';
 
 /// Maps between our domain model and the REAL Tuya DP (data point) schema
-/// of the user's Milagrow iMap Max W300 (device_id `d784c044cd0ee1361f329a`,
-/// product_id `LW41MF`). Every code and enum value below was read back from
-/// that device, not guessed.
+/// of the user's Milagrow iMap Max W300 (device_id `d7ae521a982d49fbc4ikal`
+/// as of its 2026-08-06 re-pairing, product_id `LW41MF`). Every code and
+/// enum value below was read back from that device, not guessed.
 ///
 /// Important: two different schemas exist for this robot. Tuya's v1.x
 /// `/specifications` endpoint returns only the *standard instruction set*

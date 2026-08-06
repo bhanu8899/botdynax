@@ -19,7 +19,7 @@ import axios from 'axios';
 
 import { canonicalizeTuyaPath, signTuyaRequest } from '../src/tuya/tuya-signature.util';
 
-const DEVICE_ID = 'd784c044cd0ee1361f329a';
+const DEVICE_ID = 'd7ae521a982d49fbc4ikal';
 const WATCH_SECONDS = 150;
 const POLL_MS = 3000;
 

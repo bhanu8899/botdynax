@@ -103,7 +103,7 @@ const PAGE = `<!doctype html>
 
 <script>
 const API = '/api/v1';
-const SERIAL = 'd784c044cd0ee1361f329a';
+const SERIAL = 'd7ae521a982d49fbc4ikal'; // re-paired 2026-08-06, new Tuya device id
 const HILITE = ['total_error','mop_state','status','water_output','sweep_mop_mode'];
 
 let token = null, robotId = null, prev = {}, seeded = false, latest = [];

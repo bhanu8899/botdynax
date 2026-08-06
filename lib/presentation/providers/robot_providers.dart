@@ -18,7 +18,10 @@ import 'auth_providers.dart';
 /// reached through Tuya Cloud (Smart Life ecosystem) rather than
 /// BotDyNax's own BLE/WiFi/MQTT firmware.
 abstract final class MilagrowW300 {
-  static const String tuyaDeviceId = 'd784c044cd0ee1361f329a';
+  // Re-paired on 2026-08-06, which Tuya treats as a brand new device
+  // binding with a new id -- the old id (d784c044cd0ee1361f329a) now
+  // 404s ("device does not exist") and permission-denies on every call.
+  static const String tuyaDeviceId = 'd7ae521a982d49fbc4ikal';
   static const String productId = 'LW41MF';
   static const String name = 'iMap Max W300';
   static const String model = 'Milagrow iMap Max W300 (LW41MF)';
