@@ -18,11 +18,21 @@ import 'auth_providers.dart';
 /// reached through Tuya Cloud (Smart Life ecosystem) rather than
 /// BotDyNax's own BLE/WiFi/MQTT firmware.
 abstract final class MilagrowW300 {
-  // Re-paired on 2026-08-06, which Tuya treats as a brand new device
-  // binding with a new id -- the old id (d784c044cd0ee1361f329a) now
-  // 404s ("device does not exist") and permission-denies on every call.
-  static const String tuyaDeviceId = 'd7ae521a982d49fbc4ikal';
-  static const String productId = 'LW41MF';
+  // A stable identity for the *backend fleet record*, independent of the
+  // Tuya device id -- that id changes every time this device
+  // re-provisions with Tuya (observed after what looked like a routine
+  // reboot; the old id starts 404ing "device does not exist" afterward).
+  // This one const stays fixed regardless, so `ensureRegistered` below
+  // always resolves to the same backend robot row instead of silently
+  // creating a new one (and colliding with the old row's still-unique
+  // tuyaDeviceId) every time Tuya reassigns the device id.
+  static const String serialNumber = 'milagrow-w300-primary';
+
+  // Tuya's real product id (confirmed via `/v2.0/cloud/thing/{id}` --
+  // NOT the human-readable model string "LW41MF") -- used to look up
+  // whichever device id is currently live, via
+  // TuyaService.discoverDeviceIdByProduct / POST /tuya/robots/:id/link-auto.
+  static const String productId = 'ajfqwthgagxilcki';
   static const String name = 'iMap Max W300';
   static const String model = 'Milagrow iMap Max W300 (LW41MF)';
 }
@@ -84,11 +94,11 @@ class RobotController {
   Future<void> pairDefaultRobot() async {
     final RobotFleetRepository fleet = _ref.read(robotFleetRepositoryProvider);
     final String robotId = await fleet.ensureRegistered(
-      serialNumber: MilagrowW300.tuyaDeviceId,
+      serialNumber: MilagrowW300.serialNumber,
       name: MilagrowW300.name,
       model: MilagrowW300.model,
     );
-    await fleet.linkTuyaDevice(robotId: robotId, tuyaDeviceId: MilagrowW300.tuyaDeviceId);
+    await fleet.linkTuyaDeviceAuto(robotId: robotId, productId: MilagrowW300.productId);
     await _repository.pair(robotId);
   }
 

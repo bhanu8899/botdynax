@@ -5,4 +5,9 @@ export class UpdateRobotDto {
   @IsString()
   @MinLength(1)
   name?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  serialNumber?: string;
 }

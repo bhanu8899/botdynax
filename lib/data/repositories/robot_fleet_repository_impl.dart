@@ -24,4 +24,9 @@ class RobotFleetRepositoryImpl implements RobotFleetRepository {
   Future<void> linkTuyaDevice({required String robotId, required String tuyaDeviceId}) async {
     await _dio.post<void>('/robots/$robotId/tuya-link', data: {'tuyaDeviceId': tuyaDeviceId});
   }
+
+  @override
+  Future<void> linkTuyaDeviceAuto({required String robotId, required String productId}) async {
+    await _dio.post<void>('/tuya/robots/$robotId/link-auto', data: {'productId': productId});
+  }
 }

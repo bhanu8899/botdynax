@@ -4,6 +4,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/jwt-payload.interface';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RobotsService } from '../robots/robots.service';
+import { AutoLinkDto } from './dto/auto-link.dto';
 import { LinkAccountDto } from './dto/link-account.dto';
 import { SendCommandsDto } from './dto/send-commands.dto';
 import { TuyaService } from './tuya.service';
@@ -43,6 +44,23 @@ export class TuyaController {
   @Get('devices')
   listDevices(@CurrentUser() user: AuthenticatedUser) {
     return this.tuyaService.listDevices(user.id);
+  }
+
+  /// Looks up this product's CURRENT Tuya device id (project-scoped, no
+  /// per-user OAuth needed) and links it to `robotId` -- called instead
+  /// of the client trusting a possibly-stale id it already has. Devices
+  /// that re-provision (observed on this robot after what looked like a
+  /// routine reboot) get a brand new id from Tuya each time; calling this
+  /// on every app launch, the way `pairDefaultRobot()` does, makes that
+  /// self-healing instead of needing a manual fix every time it happens.
+  @Post('robots/:robotId/link-auto')
+  async linkAuto(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('robotId') robotId: string,
+    @Body() dto: AutoLinkDto,
+  ) {
+    const deviceId = await this.tuyaService.discoverDeviceIdByProduct(dto.productId);
+    return this.robotsService.linkTuyaDevice(user.id, robotId, deviceId);
   }
 
   /// Every device-level route below takes a *backend robot id*, not a raw

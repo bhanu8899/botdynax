@@ -291,6 +291,37 @@ export class TuyaService {
     return parsed;
   }
 
+  /// Resolves the device's CURRENT Tuya device id by product id, instead
+  /// of trusting a previously-stored one.
+  ///
+  /// Discovered while diagnosing "app shows connected but no data
+  /// updates": this device's own binding isn't stable across whatever
+  /// causes it to re-provision (observed after what the user described as
+  /// a reboot) — Tuya issues a brand new device id each time, silently
+  /// orphaning the old one (which starts 404ing "device does not exist"
+  /// on `/v2.0/cloud/thing/{id}/model`, while `/shadow/properties` kept
+  /// returning stale success:true data from a frozen last-known snapshot,
+  /// which is what made it initially look like a normal connection rather
+  /// than a broken one).
+  ///
+  /// `/v2.0/cloud/thing/device` is project-scoped (unlike
+  /// `/v1.0/users/{uid}/devices`, which needs a real per-user OAuth link
+  /// and 1106s on project-token access) — it lists every device visible
+  /// to this Cloud project regardless of binding churn, so looking the
+  /// current id up here instead of hardcoding it makes every future
+  /// re-provision self-healing.
+  async discoverDeviceIdByProduct(productId: string): Promise<string> {
+    const devices = await this.client.request<Array<{ id: string; productId: string; isOnline: boolean }>>({
+      method: 'GET',
+      path: '/v2.0/cloud/thing/device?page_size=50',
+    });
+    const match = devices.find((d) => d.productId === productId);
+    if (!match) {
+      throw new NotFoundException(`No device with product id ${productId} found in this Tuya Cloud project`);
+    }
+    return match.id;
+  }
+
   private async requireTuyaUid(botDyNaxUserId: string): Promise<string> {
     const link = await this.prisma.tuyaLink.findUnique({ where: { userId: botDyNaxUserId } });
     if (!link) {

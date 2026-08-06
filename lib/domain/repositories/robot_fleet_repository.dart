@@ -15,4 +15,11 @@ abstract class RobotFleetRepository {
   /// calls can resolve+authorize it. Safe to call repeatedly with the same
   /// device id.
   Future<void> linkTuyaDevice({required String robotId, required String tuyaDeviceId});
+
+  /// Looks up the product's CURRENT Tuya device id server-side (no
+  /// per-user OAuth needed) and links it — for devices that can get a new
+  /// device id from Tuya on re-provisioning, calling this instead of
+  /// [linkTuyaDevice] with a hardcoded id keeps working across that
+  /// without needing an app update every time it happens.
+  Future<void> linkTuyaDeviceAuto({required String robotId, required String productId});
 }
