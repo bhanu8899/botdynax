@@ -311,9 +311,12 @@ export class TuyaService {
   /// current id up here instead of hardcoding it makes every future
   /// re-provision self-healing.
   async discoverDeviceIdByProduct(productId: string): Promise<string> {
+    // page_size above ~20 gets rejected with "param size too much"
+    // (confirmed live: 50 fails, 20 works) -- undocumented, but this
+    // project only ever has the one OEM'd device anyway.
     const devices = await this.client.request<Array<{ id: string; productId: string; isOnline: boolean }>>({
       method: 'GET',
-      path: '/v2.0/cloud/thing/device?page_size=50',
+      path: '/v2.0/cloud/thing/device?page_size=20',
     });
     const match = devices.find((d) => d.productId === productId);
     if (!match) {
