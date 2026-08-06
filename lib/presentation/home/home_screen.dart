@@ -230,7 +230,14 @@ class _DashboardView extends ConsumerWidget {
       children: [
         _Header(status: status),
         const SizedBox(height: AppSpacing.lg),
-        RobotModel3D(status: status),
+        // The 3D robot gets the largest slot on the dashboard — it's the
+        // main at-a-glance status readout, and the fault highlighting is
+        // only legible at a decent size. Scales with the viewport so it
+        // stays proportionate on small and large phones alike.
+        RobotModel3D(
+          status: status,
+          height: (MediaQuery.sizeOf(context).height * 0.42).clamp(280.0, 460.0),
+        ),
         const SizedBox(height: AppSpacing.sm),
         Center(
           child: Text(_activityLabel(status.activity), style: theme.textTheme.headlineSmall),
@@ -248,6 +255,11 @@ class _DashboardView extends ConsumerWidget {
           const SizedBox(height: AppSpacing.md),
           _ErrorBanner(status: status),
         ],
+        // Start/Pause/Stop/Dock sit directly under the robot rather than
+        // at the bottom of the page — they're the controls reached for
+        // most often, and previously needed a long scroll to get to.
+        const SizedBox(height: AppSpacing.lg),
+        _QuickActions(status: status, controller: controller),
         const SizedBox(height: AppSpacing.lg),
         GlassCard(
           glowColor: AppColors.neonCyan,
@@ -372,10 +384,6 @@ class _DashboardView extends ConsumerWidget {
             ),
           ),
         ],
-        const SizedBox(height: AppSpacing.lg),
-        Text('Quick Actions', style: theme.textTheme.titleMedium),
-        const SizedBox(height: AppSpacing.sm),
-        _QuickActions(status: status, controller: controller),
       ],
     );
   }

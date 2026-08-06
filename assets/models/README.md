@@ -1,22 +1,34 @@
-# 3D robot models
+# 3D model
 
-Two files, both committed to the repo:
+`botdynax_scene.glb` — BotDyNax's own robot + dock model, generated
+procedurally by `build_model.mjs.txt` (rename to .mjs and run with
+`@gltf-transform/core` + `@gltf-transform/functions` installed).
 
-- `robot_vacuum.glb` — the original download, contains both the dock and
-  the robot together. Shown while the robot is at/approaching the dock
-  (`returningToDock`, `docked`, `charging`).
-- `robot_only.glb` — derived from the file above by clustering every
-  mesh's real world-space position (not a guess) and keeping only the
-  42 nodes belonging to the robot, recentered to the origin. Shown for
-  every other activity, so the dock disappears once the robot has left it.
+Built from scratch because the previously-sourced Sketchfab asset was an
+exterior *surface shell*: the whole robot chassis was a single
+65k-vertex mesh and the whole dock tower a single 59k-vertex mesh
+(verified by dumping every node's bounding box). Nothing was separable,
+so spinning brushes, driving wheels and per-component fault highlighting
+were all impossible on it.
 
-Source: "Robot vacuum Cleaner Rob-vac" by darkfrei on Sketchfab
-(https://sketchfab.com/3d-models/robot-vacuum-cleaner-rob-vac-7d904c05d4204d19a2940d9d6f21ef8d),
-licensed CC-BY 4.0 — attribution to darkfrei is required and is included
-in the app's Settings > Credits screen.
+Every functional part here is its own node with its own material:
+  Body, TrimRing, Lidar, LidarRing, Bumper, RobotLogo, DustBin,
+  WheelLeft/Right, SideBrushLeft, MainBrush, MopPadLeft/Right,
+  MopMarkerLeft/Right, DockBase, DockTower, ContactLeft/Right,
+  CleanWaterTank, SewageTank, DustBag, DockLogo
 
-To regenerate `robot_only.glb` if `robot_vacuum.glb` is ever replaced,
-see the node-clustering + `@gltf-transform/core` extraction approach
-used originally (world-space X position splits cleanly into two
-clusters: dock nodes cluster below x=0.3, robot nodes above it, in the
-original file's local coordinate space).
+Baked animation clips (model-viewer plays one at a time, so each clip
+carries every channel that state needs):
+  idle, undocking, cleaning, docking, charging, inspect_underside
+
+Fault-highlightable materials, each mapped to a `total_error` code
+empirically confirmed on the real W300:
+  mop_pad (21) · dust_bin (46) · dust_bag (18)
+  clean_tank (24) · sewage_tank (25)
+
+`MopMarkerLeft/Right` share the `mop_pad` material so a mop fault shows
+on the top shell immediately, rather than only after the
+`inspect_underside` flip reveals the actual pads.
+
+Logo is a real texture-mapped decal baked into the geometry (robot top
+shell + dock front face), not a UI overlay.

@@ -1,0 +1,544 @@
+/**
+ * Procedurally builds BotDyNax's own robot + dock glTF models.
+ *
+ * Why: the sourced Sketchfab asset is an exterior *surface shell* -- the
+ * whole robot chassis is a single 65k-vert mesh and the whole dock tower a
+ * single 59k-vert mesh (verified by dumping every node's bounding box).
+ * Nothing to rotate, nothing to isolate, so spinning brushes / driving
+ * wheels / per-component fault highlighting were all impossible on it.
+ *
+ * This builds a stylised-but-clean equivalent where every functional part
+ * is its own node with its own material, plus real baked glTF animation
+ * clips (one per app state, since model-viewer plays one clip at a time
+ * and each clip therefore has to carry every channel that state needs).
+ *
+ * Coordinate system: glTF standard, +Y up. The robot's FRONT faces +Z
+ * (bumper, side brushes and main brush are all there); the dock sits at
+ * -Z behind it, so the robot REVERSES into the dock — which is both how
+ * real docks work and why the mop pads live at the back: backing in puts
+ * them over the dock's wash tray.
+ */
+import { readFileSync } from 'fs';
+import { NodeIO, Document } from '@gltf-transform/core';
+
+const doc = new Document();
+const buffer = doc.createBuffer();
+const scene = doc.createScene('BotDyNax');
+
+// ---------------------------------------------------------------- helpers
+
+function accessor(name, array, type) {
+  return doc.createAccessor(name).setArray(array).setType(type).setBuffer(buffer);
+}
+
+function makeMesh(name, positions, normals, indices, material) {
+  const prim = doc
+    .createPrimitive()
+    .setAttribute('POSITION', accessor(name + '_P', new Float32Array(positions), 'VEC3'))
+    .setAttribute('NORMAL', accessor(name + '_N', new Float32Array(normals), 'VEC3'))
+    .setIndices(accessor(name + '_I', new Uint32Array(indices), 'SCALAR'))
+    .setMaterial(material);
+  return doc.createMesh(name).addPrimitive(prim);
+}
+
+/** Vertical cylinder centred on the local origin, axis = +Y. */
+function cylinderGeo(radius, height, segments = 48, topRadius = null) {
+  const rTop = topRadius === null ? radius : topRadius;
+  const P = [], N = [], I = [];
+  const hy = height / 2;
+  // side wall
+  for (let i = 0; i <= segments; i++) {
+    const a = (i / segments) * Math.PI * 2;
+    const cs = Math.cos(a), sn = Math.sin(a);
+    P.push(cs * radius, -hy, sn * radius);
+    N.push(cs, 0, sn);
+    P.push(cs * rTop, hy, sn * rTop);
+    N.push(cs, 0, sn);
+  }
+  for (let i = 0; i < segments; i++) {
+    const b = i * 2;
+    I.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
+  }
+  // caps
+  for (const [y, r, ny] of [[hy, rTop, 1], [-hy, radius, -1]]) {
+    const centre = P.length / 3;
+    P.push(0, y, 0); N.push(0, ny, 0);
+    const first = P.length / 3;
+    for (let i = 0; i <= segments; i++) {
+      const a = (i / segments) * Math.PI * 2;
+      P.push(Math.cos(a) * r, y, Math.sin(a) * r);
+      N.push(0, ny, 0);
+    }
+    // Winding: vertices advance from +X toward +Z, which reads CLOCKWISE
+    // when viewed from +Y — so the top cap needs the reversed order to
+    // face outward, and the bottom cap the forward order. (Getting this
+    // backwards makes every cap backface-cull, so you see straight
+    // through the shell into the parts inside it.)
+    for (let i = 0; i < segments; i++) {
+      if (ny > 0) I.push(centre, first + i + 1, first + i);
+      else I.push(centre, first + i, first + i + 1);
+    }
+  }
+  return { P, N, I };
+}
+
+/** Axis-aligned box centred on the local origin. */
+function boxGeo(w, h, d) {
+  const x = w / 2, y = h / 2, z = d / 2;
+  const faces = [
+    { n: [0, 0, 1], v: [[-x, -y, z], [x, -y, z], [x, y, z], [-x, y, z]] },
+    { n: [0, 0, -1], v: [[x, -y, -z], [-x, -y, -z], [-x, y, -z], [x, y, -z]] },
+    { n: [1, 0, 0], v: [[x, -y, z], [x, -y, -z], [x, y, -z], [x, y, z]] },
+    { n: [-1, 0, 0], v: [[-x, -y, -z], [-x, -y, z], [-x, y, z], [-x, y, -z]] },
+    { n: [0, 1, 0], v: [[-x, y, z], [x, y, z], [x, y, -z], [-x, y, -z]] },
+    { n: [0, -1, 0], v: [[-x, -y, -z], [x, -y, -z], [x, -y, z], [-x, -y, z]] },
+  ];
+  const P = [], N = [], I = [];
+  faces.forEach((f, fi) => {
+    f.v.forEach((v) => { P.push(...v); N.push(...f.n); });
+    const b = fi * 4;
+    I.push(b, b + 1, b + 2, b, b + 2, b + 3);
+  });
+  return { P, N, I };
+}
+
+/** Flat quad facing +Y (up) by default, with UVs, for logo decals.
+ *  `crop` selects a sub-rect of the texture as [u0, v0, u1, v1] — the
+ *  logo PNG is a square with the wordmark in a thin band through the
+ *  middle and large transparent margins, so mapping the whole texture
+ *  would squash the wordmark to near-invisibility. */
+function planeGeo(w, d, crop = [0, 0, 1, 1]) {
+  const x = w / 2, z = d / 2;
+  const [u0, v0, u1, v1] = crop;
+  return {
+    P: [-x, 0, z, x, 0, z, x, 0, -z, -x, 0, -z],
+    N: [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0],
+    I: [0, 1, 2, 0, 2, 3],
+    UV: [u0, v1, u1, v1, u1, v0, u0, v0],
+  };
+}
+
+// Bounding box of the actual wordmark within the square logo PNG,
+// measured off the rendered image rather than assumed.
+const LOGO_CROP = [0.175, 0.425, 0.815, 0.545];
+
+function makeDecal(name, geo, material) {
+  const prim = doc
+    .createPrimitive()
+    .setAttribute('POSITION', accessor(name + '_P', new Float32Array(geo.P), 'VEC3'))
+    .setAttribute('NORMAL', accessor(name + '_N', new Float32Array(geo.N), 'VEC3'))
+    .setAttribute('TEXCOORD_0', accessor(name + '_UV', new Float32Array(geo.UV), 'VEC2'))
+    .setIndices(accessor(name + '_I', new Uint32Array(geo.I), 'SCALAR'))
+    .setMaterial(material);
+  return doc.createMesh(name).addPrimitive(prim);
+}
+
+function material(name, rgba, { metallic = 0.1, roughness = 0.65, emissive = null, transparent = false } = {}) {
+  const m = doc.createMaterial(name)
+    .setBaseColorFactor(rgba)
+    .setMetallicFactor(metallic)
+    .setRoughnessFactor(roughness);
+  if (emissive) m.setEmissiveFactor(emissive);
+  if (transparent) m.setAlphaMode('BLEND');
+  return m;
+}
+
+function node(name, mesh, translation = [0, 0, 0], rotation = null, scale = null) {
+  const n = doc.createNode(name).setTranslation(translation);
+  if (mesh) n.setMesh(mesh);
+  if (rotation) n.setRotation(rotation);
+  if (scale) n.setScale(scale);
+  return n;
+}
+
+/** Quaternion for a rotation of `angle` radians about a unit axis. */
+function quat(axis, angle) {
+  const s = Math.sin(angle / 2);
+  return [axis[0] * s, axis[1] * s, axis[2] * s, Math.cos(angle / 2)];
+}
+
+// -------------------------------------------------------------- materials
+
+const MAT = {
+  shell: material('shell', [0.93, 0.94, 0.96, 1], { roughness: 0.45 }),
+  shellDark: material('shell_dark', [0.16, 0.18, 0.22, 1], { roughness: 0.5 }),
+  lidar: material('lidar', [0.28, 0.30, 0.35, 1], { metallic: 0.5, roughness: 0.35 }),
+  accent: material('accent', [0.13, 0.85, 0.78, 1], { emissive: [0.05, 0.35, 0.32] }),
+  wheel: material('wheel', [0.12, 0.13, 0.16, 1], { roughness: 0.9 }),
+  // Fault-highlightable parts each get their own material so exactly one
+  // can be tinted red without touching anything else.
+  sideBrush: material('side_brush', [0.95, 0.85, 0.35, 1], { roughness: 0.8 }),
+  mainBrush: material('main_brush', [0.30, 0.32, 0.38, 1], { roughness: 0.85 }),
+  mopPad: material('mop_pad', [0.88, 0.90, 0.94, 1], { roughness: 0.95 }),
+  dustBin: material('dust_bin', [0.72, 0.75, 0.80, 1], { roughness: 0.6 }),
+  dockBody: material('dock_body', [0.90, 0.91, 0.94, 1], { roughness: 0.5 }),
+  cleanTank: material('clean_tank', [0.55, 0.78, 0.95, 0.72], { roughness: 0.2, transparent: true }),
+  sewageTank: material('sewage_tank', [0.80, 0.68, 0.45, 0.72], { roughness: 0.2, transparent: true }),
+  contacts: material('contacts', [0.85, 0.70, 0.25, 1], { metallic: 0.9, roughness: 0.25 }),
+  dustBag: material('dust_bag', [0.86, 0.85, 0.81, 1], { roughness: 0.95 }),
+  // Dock finish: charcoal base + a dark glossy front panel against the
+  // white shell, with an emissive accent strip — reads as a premium
+  // two-tone appliance rather than a plain white box.
+  dockDark: material('dock_dark', [0.11, 0.12, 0.15, 1], { metallic: 0.35, roughness: 0.35 }),
+  dockGloss: material('dock_gloss', [0.07, 0.08, 0.10, 1], { metallic: 0.6, roughness: 0.12 }),
+  dockAccent: material('dock_accent', [0.13, 0.85, 0.78, 1], { emissive: [0.10, 0.70, 0.64], roughness: 0.3 }),
+};
+
+// Real BotDyNax logo baked in as an actual texture-mapped decal on the
+// geometry (not a UI overlay) -- the black-on-transparent variant, which
+// reads correctly against both the white shell and the white dock.
+const logoTexture = doc
+  .createTexture('BotDyNaxLogo')
+  .setImage(readFileSync('logo_black.png'))
+  .setMimeType('image/png');
+MAT.logo = doc
+  .createMaterial('logo')
+  .setBaseColorFactor([1, 1, 1, 1])
+  .setBaseColorTexture(logoTexture)
+  .setMetallicFactor(0)
+  .setRoughnessFactor(0.55)
+  .setAlphaMode('BLEND');
+
+// ------------------------------------------------------------------ robot
+
+const R = 0.17;            // robot radius
+const BODY_H = 0.085;      // body height
+const GROUND = 0.0;        // wheels touch y = 0
+
+const robotRoot = node('RobotRoot', null, [0, 0, 0]);
+
+const bodyY = GROUND + 0.012 + BODY_H / 2;
+robotRoot.addChild(node('Body', makeMesh('Body', ...Object.values(cylinderGeo(R, BODY_H, 64)), MAT.shell), [0, bodyY, 0]));
+
+// Top LiDAR turret (spins while cleaning)
+const lidar = node(
+  'Lidar',
+  makeMesh('Lidar', ...Object.values(cylinderGeo(0.032, 0.022, 32)), MAT.lidar),
+  [0, bodyY + BODY_H / 2 + 0.011, 0],
+);
+robotRoot.addChild(lidar);
+robotRoot.addChild(node(
+  'LidarRing',
+  makeMesh('LidarRing', ...Object.values(cylinderGeo(0.035, 0.006, 32)), MAT.accent),
+  [0, bodyY + BODY_H / 2 + 0.001, 0],
+));
+
+// Accent trim ring around the body's waistline — a slightly proud band
+// in the brand teal so the robot reads as branded rather than a plain
+// white puck.
+robotRoot.addChild(node(
+  'TrimRing',
+  makeMesh('TrimRing', ...Object.values(cylinderGeo(R + 0.0022, 0.0075, 64)), MAT.accent),
+  [0, bodyY - BODY_H / 2 + 0.014, 0],
+));
+
+// Front sensor strip — a modest dark inset across the front face.
+// Deliberately a single slim piece: an earlier version built this as a
+// 22-segment arc following the body curve, which made the front far too
+// heavy visually and turned out to be what stopped the whole model
+// loading in three.js.
+robotRoot.addChild(node(
+  'Bumper',
+  makeMesh('Bumper', ...Object.values(boxGeo(0.115, 0.016, 0.010)), MAT.shellDark),
+  [0, bodyY - 0.014, R - 0.003],
+));
+
+// BotDyNax logo, laid flat on the robot's top shell in front of the
+// turret. Sits a hair proud of the surface to avoid z-fighting.
+robotRoot.addChild(node(
+  'RobotLogo',
+  makeDecal('RobotLogo', planeGeo(0.105, 0.0197, LOGO_CROP), MAT.logo),
+  [0, bodyY + BODY_H / 2 + 0.0006, 0.070],
+));
+
+// Dust bin — a flush lid panel let INTO the top shell rather than a
+// block sitting on top of it, so the silhouette stays clean. Still its
+// own node/material so fault code 46 can highlight exactly this.
+robotRoot.addChild(node(
+  'DustBin',
+  makeMesh('DustBin', ...Object.values(boxGeo(0.140, 0.007, 0.086)), MAT.dustBin),
+  [0, bodyY + BODY_H / 2 - 0.0025, -0.050],
+));
+
+// Wheels — spin about their local X axle.
+for (const [name, x] of [['WheelLeft', -R + 0.022], ['WheelRight', R - 0.022]]) {
+  const geo = cylinderGeo(0.028, 0.016, 24);
+  robotRoot.addChild(node(
+    name,
+    makeMesh(name, ...Object.values(geo), MAT.wheel),
+    [x, GROUND + 0.028, -0.015],
+    quat([0, 0, 1], Math.PI / 2), // lay the cylinder on its side
+  ));
+}
+
+// Side brush — a single 3-arm spinner at the front-LEFT corner (the real
+// machine has one, not a pair), sweeping debris in toward the main brush.
+for (const [name, x] of [['SideBrushLeft', -R + 0.042]]) {
+  const hub = node(name, null, [x, GROUND + 0.014, 0.088]);
+  hub.addChild(node(name + 'Hub', makeMesh(name + 'Hub', ...Object.values(cylinderGeo(0.013, 0.008, 16)), MAT.shellDark)));
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2;
+    const arm = makeMesh(name + 'Arm' + i, ...Object.values(boxGeo(0.050, 0.004, 0.007)), MAT.sideBrush);
+    hub.addChild(node(name + 'Arm' + i, arm, [Math.cos(a) * 0.029, 0, Math.sin(a) * 0.029], quat([0, 1, 0], -a)));
+  }
+  robotRoot.addChild(hub);
+}
+
+// Main brush — horizontal roller across the FRONT underside, spins about X.
+robotRoot.addChild(node(
+  'MainBrush',
+  makeMesh('MainBrush', ...Object.values(cylinderGeo(0.018, 0.20, 20)), MAT.mainBrush),
+  [0, GROUND + 0.019, 0.040],
+  quat([0, 0, 1], Math.PI / 2),
+));
+
+// Mop pads — two discs at the REAR underside, spin about Y. Rear-mounted
+// so reversing into the dock parks them over the wash tray.
+for (const [name, x] of [['MopPadLeft', -0.072], ['MopPadRight', 0.072]]) {
+  robotRoot.addChild(node(
+    name,
+    makeMesh(name, ...Object.values(cylinderGeo(0.054, 0.010, 32)), MAT.mopPad),
+    [x, GROUND + 0.007, -0.078],
+  ));
+}
+
+// Mop status markers — flush rings on the TOP shell directly above each
+// pad. They carry the same `mop_pad` material, so a mop fault turns them
+// red at the same instant as the pads themselves: the problem is visible
+// straight away from the normal top-down view, without waiting for the
+// belly-up inspect flip to reveal the underside.
+for (const [name, x] of [['MopMarkerLeft', -0.072], ['MopMarkerRight', 0.072]]) {
+  robotRoot.addChild(node(
+    name,
+    makeMesh(name, ...Object.values(cylinderGeo(0.030, 0.0022, 28)), MAT.mopPad),
+    [x, bodyY + BODY_H / 2 + 0.0004, -0.078],
+  ));
+}
+
+// ------------------------------------------------------------------- dock
+
+const DOCK_Z = -0.34;
+const dockRoot = node('DockRoot', null, [0, 0, DOCK_Z]);
+
+// Ramp/base plate the robot parks on
+dockRoot.addChild(node(
+  'DockBase',
+  makeMesh('DockBase', ...Object.values(boxGeo(0.36, 0.016, 0.34)), MAT.dockBody),
+  [0, GROUND + 0.007, 0.12],
+));
+
+// Tower — plain white, single volume. A darker two-tone treatment with
+// accent strips was tried and reverted: it also buried the tanks and
+// dust bag behind an opaque fascia, hiding their fault highlights.
+dockRoot.addChild(node(
+  'DockTower',
+  makeMesh('DockTower', ...Object.values(boxGeo(0.30, 0.42, 0.16)), MAT.dockBody),
+  [0, GROUND + 0.21, -0.05],
+));
+
+// Charging contacts (emissive-capable, for the charging breathing glow)
+for (const [name, x] of [['ContactLeft', -0.045], ['ContactRight', 0.045]]) {
+  dockRoot.addChild(node(
+    name,
+    makeMesh(name, ...Object.values(boxGeo(0.030, 0.020, 0.006)), MAT.contacts),
+    [x, GROUND + 0.045, 0.032],
+  ));
+}
+
+// Water tanks — separate nodes AND separate materials, so each can be
+// highlighted independently for its own fault. Seated in the tower's
+// upper front bay (protruding slightly past the tower face at z=0.03) so
+// they're actually visible rather than buried inside the tower volume.
+dockRoot.addChild(node(
+  'CleanWaterTank',
+  makeMesh('CleanWaterTank', ...Object.values(boxGeo(0.125, 0.17, 0.10)), MAT.cleanTank),
+  [0.070, GROUND + 0.305, -0.018],
+));
+dockRoot.addChild(node(
+  'SewageTank',
+  makeMesh('SewageTank', ...Object.values(boxGeo(0.125, 0.17, 0.10)), MAT.sewageTank),
+  [-0.070, GROUND + 0.305, -0.018],
+));
+
+// Dust bag — its own part/material so fault code 18 ("dust bag removed
+// from the dock") can highlight exactly this. Sits in the tower's lower
+// bay, between the tank bay above and the charging contacts below.
+dockRoot.addChild(node(
+  'DustBag',
+  makeMesh('DustBag', ...Object.values(boxGeo(0.145, 0.085, 0.085)), MAT.dustBag),
+  [0, GROUND + 0.125, 0.010],
+));
+
+// BotDyNax logo on the tower's front face, below the tank bay. Rotated
+// upright (the decal plane faces +Y by default) and pushed just proud of
+// the face to avoid z-fighting.
+dockRoot.addChild(node(
+  'DockLogo',
+  makeDecal('DockLogo', planeGeo(0.17, 0.0319, LOGO_CROP), MAT.logo),
+  [0, GROUND + 0.196, 0.0315],
+  quat([1, 0, 0], Math.PI / 2),
+));
+
+scene.addChild(robotRoot).addChild(dockRoot);
+
+// ------------------------------------------------------------- animations
+
+const byName = {};
+for (const n of doc.getRoot().listNodes()) byName[n.getName()] = n;
+
+function track(anim, targetNode, path, times, values) {
+  const input = accessor(`${anim.getName()}_${targetNode.getName()}_${path}_T`, new Float32Array(times), 'SCALAR');
+  const output = accessor(
+    `${anim.getName()}_${targetNode.getName()}_${path}_V`,
+    new Float32Array(values),
+    path === 'rotation' ? 'VEC4' : 'VEC3',
+  );
+  const sampler = doc.createAnimationSampler().setInput(input).setOutput(output).setInterpolation('LINEAR');
+  const channel = doc.createAnimationChannel().setTargetNode(targetNode).setTargetPath(path).setSampler(sampler);
+  anim.addSampler(sampler).addChannel(channel);
+}
+
+/** Full 360° spin about `axis`, `turns` times over `duration` seconds.
+ *  Split into quarter-turns because LINEAR quaternion interpolation takes
+ *  the short path -- a single 0->360 keyframe pair wouldn't move at all. */
+function spin(anim, targetNode, axis, duration, turns, baseQuat = null) {
+  const steps = Math.max(4, Math.round(turns * 8));
+  const times = [], values = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = (i / steps) * duration;
+    const angle = (i / steps) * turns * Math.PI * 2;
+    let q = quat(axis, angle);
+    if (baseQuat) q = mulQuat(baseQuat, q);
+    times.push(t);
+    values.push(...q);
+  }
+  track(anim, targetNode, 'rotation', times, values);
+}
+
+function mulQuat(a, b) {
+  const [ax, ay, az, aw] = a, [bx, by, bz, bw] = b;
+  return [
+    aw * bx + ax * bw + ay * bz - az * by,
+    aw * by - ax * bz + ay * bw + az * bx,
+    aw * bz + ax * by - ay * bx + az * bw,
+    aw * bw - ax * bx - ay * by - az * bz,
+  ];
+}
+
+const SIDE_AXLE = quat([0, 0, 1], Math.PI / 2); // wheels + main brush lie on their side
+
+// --- "cleaning": everything turning, robot drifting gently, away from dock
+const DOCKED_Z = -0.145;  // back edge just meets the tower face, body over the base plate
+const AWAY_Z = 0.34;       // robot clear of the dock
+
+/** Dock visibility is baked per clip as a scale channel, so the state
+ *  itself decides whether the station is on screen -- cleaning/idle show
+ *  the robot alone, docking/undocking/charging show it with the station.
+ *  Scaled rather than removed so the scene bounds (and therefore
+ *  model-viewer's camera framing) stay constant across clips, which is
+ *  what keeps the swap from jumping the camera. */
+function setDockVisible(anim, visible, duration) {
+  const s = visible ? 1 : 0.0001;
+  track(anim, byName.DockRoot, 'scale', [0, duration], [s, s, s, s, s, s]);
+}
+
+/** All the robot's rotating consumables, for the cleaning clip. */
+function spinConsumables(a, D) {
+  spin(a, byName.MainBrush, [0, 1, 0], D, 6, SIDE_AXLE);
+  spin(a, byName.SideBrushLeft, [0, 1, 0], D, 4);
+  spin(a, byName.MopPadLeft, [0, 1, 0], D, 2);
+  spin(a, byName.MopPadRight, [0, 1, 0], D, -2);
+}
+
+{
+  const a = doc.createAnimation('cleaning');
+  const D = 4;
+  setDockVisible(a, false, D);
+  spin(a, byName.WheelLeft, [0, 1, 0], D, 3, SIDE_AXLE);
+  spin(a, byName.WheelRight, [0, 1, 0], D, 3, SIDE_AXLE);
+  spin(a, byName.Lidar, [0, 1, 0], D, 4);
+  spinConsumables(a, D);
+  // Gentle wander so it doesn't look pinned in place.
+  track(a, byName.RobotRoot, 'translation',
+    [0, D / 4, D / 2, (3 * D) / 4, D],
+    [0, 0, 0.06,  0.035, 0, 0.02,  0, 0, -0.03,  -0.035, 0, 0.02,  0, 0, 0.06]);
+}
+
+// --- "docking": REVERSES into the dock (mops first, over the wash tray)
+{
+  const a = doc.createAnimation('docking');
+  const D = 3.4;
+  setDockVisible(a, true, D);
+  // Wheels turn backwards (negative) since the robot is reversing.
+  spin(a, byName.WheelLeft, [0, 1, 0], D, -2.2, SIDE_AXLE);
+  spin(a, byName.WheelRight, [0, 1, 0], D, -2.2, SIDE_AXLE);
+  spin(a, byName.Lidar, [0, 1, 0], D, 3);
+  // Swing round off to one side, line up with the dock, then back in.
+  track(a, byName.RobotRoot, 'translation',
+    [0, D * 0.30, D * 0.62, D],
+    [0.11, 0, AWAY_Z,   0.02, 0, 0.20,   0, 0, 0.055,   0, 0, DOCKED_Z]);
+  // Turn to square up with the dock, then hold straight while reversing.
+  const times = [0, D * 0.30, D * 0.62, D], yaw = [];
+  for (const f of [0.30, 0.06, 0, 0]) yaw.push(...quat([0, 1, 0], f));
+  track(a, byName.RobotRoot, 'rotation', times, yaw);
+}
+
+// --- "undocking": pulls forward out of the dock and turns away
+{
+  const a = doc.createAnimation('undocking');
+  const D = 3.0;
+  setDockVisible(a, true, D);
+  spin(a, byName.WheelLeft, [0, 1, 0], D, 2.2, SIDE_AXLE);
+  spin(a, byName.WheelRight, [0, 1, 0], D, 2.2, SIDE_AXLE);
+  spin(a, byName.Lidar, [0, 1, 0], D, 3);
+  track(a, byName.RobotRoot, 'translation',
+    [0, D * 0.3, D * 0.7, D],
+    [0, 0, DOCKED_Z,   0, 0, 0.07,   0.02, 0, 0.26,   0.09, 0, AWAY_Z]);
+  const yaw = [];
+  for (const f of [0, 0, 0.12, 0.26]) yaw.push(...quat([0, 1, 0], f));
+  track(a, byName.RobotRoot, 'rotation', [0, D * 0.3, D * 0.7, D], yaw);
+}
+
+// --- "charging": parked in the dock, only a slow lidar idle
+{
+  const a = doc.createAnimation('charging');
+  const D = 6;
+  setDockVisible(a, true, D);
+  spin(a, byName.Lidar, [0, 1, 0], D, 1);
+  track(a, byName.RobotRoot, 'translation', [0, D], [0, 0, DOCKED_Z, 0, 0, DOCKED_Z]);
+}
+
+// --- "idle": robot alone, away from the dock, nothing spinning
+{
+  const a = doc.createAnimation('idle');
+  const D = 4;
+  setDockVisible(a, false, D);
+  track(a, byName.RobotRoot, 'translation', [0, D], [0, 0, 0.10, 0, 0, 0.10]);
+  spin(a, byName.Lidar, [0, 1, 0], D, 0.5);
+}
+
+// --- "inspect_underside": rolls the robot belly-up so the mop pads and
+// main brush face the camera. Played when a fault is on a part mounted
+// underneath (mop pads removed, code 21) — otherwise the red highlight
+// would be pulsing on a surface the user can't see.
+{
+  const a = doc.createAnimation('inspect_underside');
+  const D = 4.5;
+  setDockVisible(a, false, D);
+  // Roll 180° about Z (top<->bottom, keeping front facing forward),
+  // hold belly-up for most of the clip, then settle back.
+  const times = [0, D * 0.22, D * 0.80, D];
+  const rot = [];
+  for (const f of [0, 1, 1, 0]) rot.push(...quat([0, 0, 1], f * Math.PI));
+  track(a, byName.RobotRoot, 'rotation', times, rot);
+  // Lift while inverted so it doesn't sink through the floor plane.
+  track(a, byName.RobotRoot, 'translation', times,
+    [0, 0, 0.10,   0, 0.135, 0.10,   0, 0.135, 0.10,   0, 0, 0.10]);
+  spin(a, byName.Lidar, [0, 1, 0], D, 0.5);
+}
+
+const io = new NodeIO();
+await io.write('botdynax_scene.glb', doc);
+console.log('wrote botdynax_scene.glb');
+console.log('animations:', doc.getRoot().listAnimations().map((a) => a.getName()).join(', '));
+console.log('nodes:', doc.getRoot().listNodes().length, '| materials:', doc.getRoot().listMaterials().length);
