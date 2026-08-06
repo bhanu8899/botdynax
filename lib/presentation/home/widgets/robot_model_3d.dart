@@ -37,11 +37,19 @@ const String _robotOnlyPath = 'assets/models/robot_only.glb';
 /// [_robotOnlyPath] is a second asset split out of it (by clustering every
 /// mesh's real world-space position — not a guess) containing only the
 /// robot's 42 nodes, recentered to the origin, so the robot can be shown
-/// on its own once it's left the dock: [_dockedScenePath] (both objects)
-/// renders while approaching/at the dock (`returningToDock`, `docked`,
-/// `charging`), and swapping to [_robotOnlyPath] for every other activity
-/// reads as the robot having physically left the station, with a slide
-/// transition across the swap.
+/// on its own once it's left the dock.
+///
+/// Docking/undocking is a real camera-choreographed transition, not a
+/// plain file swap: model-viewer natively animates `cameraTarget`/
+/// `cameraOrbit` changes (https://modelviewer.dev/docs/#entrydocs-
+/// stagingandcameras-attributes-cameraOrbit — "any time this value
+/// changes... the camera will interpolate"), so leaving the dock zooms
+/// the camera in on the robot within the docked scene first, THEN swaps
+/// to [_robotOnlyPath] once framed tightly enough that the swap itself
+/// is imperceptible, then eases out to a comfortable framing. Returning
+/// to the dock runs the same thing in reverse. The exact camera values
+/// were tuned empirically against the real rendered models (not
+/// guessed) so the cut between the two files lines up.
 ///
 /// Falls back to the 2D [RobotIllustration] rather than crashing if
 /// either asset hasn't been added yet.
@@ -69,12 +77,35 @@ bool _isAtOrApproachingDock(ActivityState activity) =>
     activity == ActivityState.docked ||
     activity == ActivityState.charging;
 
+// Tuned empirically in a browser against the real rendered .glb files
+// (see the model_viewer_plus investigation this widget's history came
+// from) so the docked-scene <-> robot-only cut lines up and the tight
+// framing actually isolates the robot rather than clipping into it.
+const String _robotFocusTarget = '0.6488m -0.63m 0.02m';
+const String _minOrbitRadius = 'auto auto 0.3m';
+const String _tightOrbitInScene = '0deg 65deg 0.55m';
+const String _tightOrbitRobotOnly = '0deg 65deg 0.65m';
+const String _settledOrbitRobotOnly = '0deg 68deg 100%';
+const String _wideOrbit = '10deg 70deg 105%';
+
+const Duration _focusDuration = Duration(milliseconds: 750);
+const Duration _renderSettleDuration = Duration(milliseconds: 120);
+
 class _RobotModel3DState extends State<RobotModel3D> {
   WebViewController? _webViewController;
   late final Future<bool> _modelsExist;
-  late bool _wasDocked = _isAtOrApproachingDock(widget.status.activity);
+  late bool _isDocked = _isAtOrApproachingDock(widget.status.activity);
 
-  String get _currentSrc => _isAtOrApproachingDock(widget.status.activity) ? _dockedScenePath : _robotOnlyPath;
+  /// Which .glb is actually loaded in the WebView right now — tracked
+  /// separately from [widget.status] because the dock transition changes
+  /// this mid-flight, ahead of (and independent of) further status ticks.
+  late String _loadedSrc = _isDocked ? _dockedScenePath : _robotOnlyPath;
+
+  /// Bumped on every dock-state change so an in-flight transition can
+  /// tell it's been superseded (e.g. the robot immediately leaves again
+  /// before the "arriving" animation finished) and stop issuing further
+  /// JS instead of fighting a newer transition for control of the camera.
+  int _transitionGeneration = 0;
 
   @override
   void initState() {
@@ -96,12 +127,9 @@ class _RobotModel3DState extends State<RobotModel3D> {
   void didUpdateWidget(covariant RobotModel3D oldWidget) {
     super.didUpdateWidget(oldWidget);
     final bool isDocked = _isAtOrApproachingDock(widget.status.activity);
-    if (isDocked != _wasDocked) {
-      _wasDocked = isDocked;
-      // Source is changing (docked scene <-> robot-only) -- ModelViewer's
-      // key below changes too, so this rebuild mounts a fresh WebView;
-      // _applySceneState() gets called again from its onWebViewCreated.
-      setState(() {});
+    if (isDocked != _isDocked) {
+      _isDocked = isDocked;
+      unawaited(_playDockTransition(enteringDock: isDocked));
       return;
     }
     if (oldWidget.status.activity != widget.status.activity ||
@@ -111,10 +139,112 @@ class _RobotModel3DState extends State<RobotModel3D> {
     }
   }
 
+  Future<void> _run(String js) async {
+    final WebViewController? controller = _webViewController;
+    if (controller == null) return;
+    await controller.runJavaScript(js);
+  }
+
+  /// Camera-choreographed dock/undock. See the class doc for why this is
+  /// a staged camera move + mid-flight file swap rather than a plain
+  /// crossfade: model-viewer can't smoothly interpolate between the
+  /// geometry of two different loaded files, but it CAN smoothly animate
+  /// its camera, so the trick is timing the swap for the moment the
+  /// camera is already framed tightly enough that the cut disappears.
+  Future<void> _playDockTransition({required bool enteringDock}) async {
+    final int generation = ++_transitionGeneration;
+    bool stillCurrent() => generation == _transitionGeneration && mounted;
+
+    if (enteringDock) {
+      // Currently on robot_only (settled or tight, doesn't matter) ->
+      // tighten to match the docked scene's framing -> swap -> pull back
+      // to reveal the dock, like the camera backing away as the robot
+      // settles onto the station.
+      await _run('''
+        (function() {
+          const mv = document.querySelector("model-viewer");
+          if (!mv) return;
+          mv.minCameraOrbit = "$_minOrbitRadius";
+          mv.cameraTarget = "auto";
+          mv.cameraOrbit = "$_tightOrbitRobotOnly";
+        })();
+      ''');
+      await Future<void>.delayed(_focusDuration);
+      if (!stillCurrent()) return;
+
+      _loadedSrc = _dockedScenePath;
+      await _run('''
+        (function() {
+          const mv = document.querySelector("model-viewer");
+          if (!mv) return;
+          mv.src = "$_dockedScenePath";
+          mv.minCameraOrbit = "$_minOrbitRadius";
+          mv.cameraTarget = "$_robotFocusTarget";
+          mv.cameraOrbit = "$_tightOrbitInScene";
+          mv.jumpCameraToGoal();
+        })();
+      ''');
+      await Future<void>.delayed(_renderSettleDuration);
+      if (!stillCurrent()) return;
+
+      await _run('''
+        (function() {
+          const mv = document.querySelector("model-viewer");
+          if (!mv) return;
+          mv.cameraTarget = "auto";
+          mv.cameraOrbit = "$_wideOrbit";
+        })();
+      ''');
+    } else {
+      // Currently on the docked scene, wide framing -> zoom in on just
+      // the robot -> swap to robot_only at matching framing (the robot
+      // "stepping out" of frame, dock left behind) -> settle to a
+      // comfortable single-robot view for the cleaning run ahead.
+      await _run('''
+        (function() {
+          const mv = document.querySelector("model-viewer");
+          if (!mv) return;
+          mv.minCameraOrbit = "$_minOrbitRadius";
+          mv.cameraTarget = "$_robotFocusTarget";
+          mv.cameraOrbit = "$_tightOrbitInScene";
+        })();
+      ''');
+      await Future<void>.delayed(_focusDuration);
+      if (!stillCurrent()) return;
+
+      _loadedSrc = _robotOnlyPath;
+      await _run('''
+        (function() {
+          const mv = document.querySelector("model-viewer");
+          if (!mv) return;
+          mv.src = "$_robotOnlyPath";
+          mv.minCameraOrbit = "$_minOrbitRadius";
+          mv.cameraTarget = "auto";
+          mv.cameraOrbit = "$_tightOrbitRobotOnly";
+          mv.jumpCameraToGoal();
+        })();
+      ''');
+      await Future<void>.delayed(_renderSettleDuration);
+      if (!stillCurrent()) return;
+
+      await _run('''
+        (function() {
+          const mv = document.querySelector("model-viewer");
+          if (!mv) return;
+          mv.cameraTarget = "auto";
+          mv.cameraOrbit = "$_settledOrbitRobotOnly";
+        })();
+      ''');
+    }
+    if (stillCurrent()) _applySceneState();
+  }
+
   /// Re-applies rotation speed, cleaning motion, and fault tint via the
   /// model-viewer JS scene-graph API
   /// (https://modelviewer.dev/docs/#entrydocs-scenegraph) whenever
-  /// activity/fault state changes.
+  /// activity/fault state changes. Purely material/rotation-speed —
+  /// never touches camera framing, so it can't fight [_playDockTransition]
+  /// for control of the shot.
   ///
   /// There's no way to isolate and spin just a brush/mop part (this asset
   /// has no such separable geometry, and model-viewer's stable API only
@@ -124,23 +254,14 @@ class _RobotModel3DState extends State<RobotModel3D> {
   /// slower rocking sway for mopping, distinguished so the two read
   /// differently rather than being one generic wiggle.
   void _applySceneState() {
-    final WebViewController? controller = _webViewController;
-    if (controller == null) return;
-
-    final ActivityState activity = widget.status.activity;
-    final bool isDocked = _isAtOrApproachingDock(activity);
-    final bool isCleaning = activity == ActivityState.cleaning;
+    final bool isCleaning = widget.status.activity == ActivityState.cleaning;
     final bool isFaulted = widget.status.hasErrors;
     final String colorFactor = isFaulted ? '[1, 0.25, 0.3, 1]' : '[1, 1, 1, 1]';
     final bool isMopping = widget.status.cleaningType == CleaningType.mop ||
         widget.status.cleaningType == CleaningType.mopAfterVacuum;
     final String motionClass = !isCleaning ? '' : (isMopping ? 'bd-mop' : 'bd-vacuum');
-    // A fresh WebView mounts every time the docked/undocked source swaps
-    // (see the ValueKey in build()), so this dock/undock slide plays once
-    // per transition rather than needing to be toggled off again.
-    final String dockAnimClass = isDocked ? 'bd-dock-in' : 'bd-dock-out';
 
-    unawaited(controller.runJavaScript('''
+    unawaited(_run('''
       (function() {
         const mv = document.querySelector("model-viewer");
         if (!mv) return;
@@ -158,24 +279,12 @@ class _RobotModel3DState extends State<RobotModel3D> {
               0%, 100% { transform: translateX(0) rotate(0deg); }
               50% { transform: translateX(6px) rotate(1.2deg); }
             }
-            @keyframes bd-dock-in-anim {
-              0% { transform: translateX(40px) scale(0.92); opacity: 0.4; }
-              100% { transform: translateX(0) scale(1); opacity: 1; }
-            }
-            @keyframes bd-dock-out-anim {
-              0% { transform: translateX(-40px) scale(0.92); opacity: 0.4; }
-              100% { transform: translateX(0) scale(1); opacity: 1; }
-            }
             model-viewer.bd-vacuum { animation: bd-vacuum-anim 0.35s ease-in-out infinite; }
             model-viewer.bd-mop { animation: bd-mop-anim 1.1s ease-in-out infinite; }
-            model-viewer.bd-dock-in { animation: bd-dock-in-anim 0.7s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
-            model-viewer.bd-dock-out { animation: bd-dock-out-anim 0.7s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
           `;
           document.head.appendChild(style);
         }
-        mv.classList.remove("bd-vacuum", "bd-mop", "bd-dock-in", "bd-dock-out");
-        mv.classList.add("$dockAnimClass");
-        void mv.offsetWidth; // restart the animation on every source swap
+        mv.classList.remove("bd-vacuum", "bd-mop");
         ${motionClass.isNotEmpty ? 'mv.classList.add("$motionClass");' : ''}
 
         mv.autoRotate = $isCleaning;
@@ -206,14 +315,21 @@ class _RobotModel3DState extends State<RobotModel3D> {
             // works in the meantime.
             return Center(child: RobotIllustration(status: widget.status));
           }
-          final String src = _currentSrc;
           return Stack(
             children: [
+              // No ValueKey(src) here on purpose -- this widget/WebView
+              // must stay mounted across dock/undock so
+              // _playDockTransition can drive `mv.src` itself, timed
+              // against the camera animation. [_loadedSrc] (fixed at
+              // first build) is only the INITIAL file; every change after
+              // that goes through JS, not through rebuilding this widget.
               ModelViewer(
-                key: ValueKey(src),
-                src: src,
+                src: _loadedSrc,
                 alt: 'BotDyNax robot vacuum 3D model',
                 backgroundColor: Colors.transparent,
+                cameraTarget: 'auto',
+                cameraOrbit: _isDocked ? _wideOrbit : _settledOrbitRobotOnly,
+                minCameraOrbit: _minOrbitRadius,
                 autoRotate: widget.status.activity == ActivityState.cleaning,
                 rotationPerSecond: widget.status.activity == ActivityState.cleaning ? '60deg' : '8deg',
                 cameraControls: true,
