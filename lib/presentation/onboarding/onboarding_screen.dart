@@ -10,6 +10,7 @@ import '../../core/storage/local_storage_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/bd_buttons.dart';
+import '../../core/widgets/brand_logo.dart';
 
 class _OnboardingSlide {
   const _OnboardingSlide({required this.icon, required this.title, required this.description});
@@ -70,14 +71,17 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            Align(
-              alignment: Alignment.topRight,
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.md),
-                child: TextButton(
-                  onPressed: _finish,
-                  child: const Text('Skip'),
-                ),
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Row(
+                children: [
+                  const BrandLogo(height: 28),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: _finish,
+                    child: const Text('Skip'),
+                  ),
+                ],
               ),
             ),
             Expanded(

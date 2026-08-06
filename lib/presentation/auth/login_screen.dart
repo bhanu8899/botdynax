@@ -7,6 +7,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/bd_buttons.dart';
 import '../../core/widgets/bd_text_field.dart';
+import '../../core/widgets/brand_logo.dart';
 import '../providers/auth_providers.dart';
 import '../providers/auth_state.dart';
 
@@ -52,14 +53,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: AppSpacing.xl),
-                ShaderMask(
-                  shaderCallback: (Rect bounds) => AppColors.brandGradient.createShader(bounds),
-                  child: Text(
-                    'BotDyNax',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.displayMedium?.copyWith(color: Colors.white),
-                  ),
-                ),
+                const Center(child: BrandLogo(height: 48)),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   'Welcome back',
