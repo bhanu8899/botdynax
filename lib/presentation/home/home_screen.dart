@@ -15,7 +15,6 @@ import '../../core/widgets/glass_card.dart';
 import '../../core/widgets/skeleton_loader.dart';
 import '../../core/widgets/status_pill.dart';
 import '../../domain/entities/app_notification.dart';
-import '../../domain/entities/consumable.dart';
 import '../../domain/entities/robot_enums.dart';
 import '../../domain/entities/robot_status.dart';
 import '../../domain/transport/robot_transport.dart';
@@ -23,7 +22,6 @@ import '../map/widgets/cleaning_preferences_sheet.dart';
 import '../map/widgets/station_sheet.dart';
 import '../providers/cloud_providers.dart';
 import '../providers/robot_providers.dart';
-import 'widgets/consumable_tile.dart';
 import 'widgets/robot_model_3d.dart';
 import 'widgets/signal_indicator.dart';
 
@@ -68,7 +66,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       FirmwareUpdateAvailableEvent(:final version) => 'Firmware $version is available',
     };
 
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    // Replace rather than queue: repeated events used to stack up, so a
+    // fault banner could still be on screen well after the fault itself
+    // had cleared, until something else dismissed it.
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 3),
+      ));
 
     switch (event) {
       case CleaningStartedEvent():
@@ -132,6 +138,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     ref.listen(robotEventsProvider, (AsyncValue<RobotEvent>? previous, AsyncValue<RobotEvent> next) {
       final RobotEvent? event = next.valueOrNull;
       if (event != null) _showEventBanner(event);
+    });
+
+    // Faults only push an event when they APPEAR, never when they clear —
+    // so a "needs attention" banner would otherwise sit there after the
+    // user had already fixed the problem. Watching the status directly
+    // lets it be dismissed the moment the robot stops reporting the fault.
+    ref.listen(robotStatusProvider, (AsyncValue<RobotStatus>? prev, AsyncValue<RobotStatus> next) {
+      final bool had = prev?.valueOrNull?.hasErrors ?? false;
+      final bool has = next.valueOrNull?.hasErrors ?? false;
+      if (had && !has && mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      }
     });
 
     return Scaffold(
@@ -341,11 +359,14 @@ class _DashboardView extends ConsumerWidget {
               icon: Icons.build_circle_outlined,
               onTap: () => context.push(AppRoutes.accessories),
             ),
-            _HubTile(
-              label: 'Diagnostics',
-              icon: Icons.monitor_heart_outlined,
-              onTap: () => context.push(AppRoutes.diagnostics),
-            ),
+            // Diagnostics is a raw DP dump — a developer tool, so it's
+            // only offered while Developer Mode is on (Settings).
+            if (ref.watch(localStorageServiceProvider).developerMode)
+              _HubTile(
+                label: 'Diagnostics',
+                icon: Icons.monitor_heart_outlined,
+                onTap: () => context.push(AppRoutes.diagnostics),
+              ),
             _HubTile(
               label: 'Settings',
               icon: Icons.settings_outlined,
@@ -363,29 +384,12 @@ class _DashboardView extends ConsumerWidget {
             Expanded(child: _MiniStat(label: 'Remaining', value: _formatShort(status.cleaningRemaining))),
           ],
         ),
-        const SizedBox(height: AppSpacing.sm),
-        // Deliberately not a dust-bin fill percentage: this robot has no
-        // DP for it, so that tile could only ever show a hardcoded 0%.
-        // Mop Pads is real — driven by the confirmed mop-pad fault code.
-        _MiniStat(
-          label: 'Mop Pads',
-          value: status.faultCodes.contains(21) ? 'Removed' : 'Fitted',
-        ),
-        if (status.consumables.isNotEmpty) ...[
-          const SizedBox(height: AppSpacing.lg),
-          Text('Accessories', style: theme.textTheme.titleMedium),
-          const SizedBox(height: AppSpacing.sm),
-          GlassCard(
-            child: Column(
-              children: [
-                for (final (int index, Consumable consumable) in status.consumables.indexed) ...[
-                  ConsumableTile(consumable: consumable),
-                  if (index != status.consumables.length - 1) const SizedBox(height: AppSpacing.sm),
-                ],
-              ],
-            ),
-          ),
-        ],
+        // The "Mop Pads: Fitted/Removed" tile and the Accessories list
+        // both used to sit here. Removed deliberately: a missing mop pad
+        // already raises a fault (notification + red highlight on the 3D
+        // model), so a permanent "Fitted" row carried no information; and
+        // Accessories has its own screen reachable from the hub tile
+        // above, so duplicating the list here just lengthened the scroll.
       ],
     );
   }
