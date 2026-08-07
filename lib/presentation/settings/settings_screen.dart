@@ -7,6 +7,7 @@ import '../../core/storage/local_storage_provider.dart';
 import '../../core/storage/local_storage_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
+import '../../core/widgets/brand_logo.dart';
 import '../../core/widgets/glass_card.dart';
 import '../../domain/entities/robot_enums.dart';
 import '../../domain/entities/robot_status.dart';
@@ -155,8 +156,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           // than third-party licensed work.
           const SizedBox(height: AppSpacing.lg),
           Center(
-            child: Text('BotDyNax v1.0.0', style: theme.textTheme.bodySmall),
+            child: Column(
+              children: [
+                const BrandLogo(height: 22),
+                const SizedBox(height: AppSpacing.sm),
+                Text('Version 1.0.0', style: theme.textTheme.bodySmall),
+                const SizedBox(height: AppSpacing.xxs),
+                Text(
+                  '© ${DateTime.now().year} BotDyNax™. All rights reserved.',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textTertiaryDark),
+                ),
+                const SizedBox(height: AppSpacing.xxs),
+                Text(
+                  'Designed & Made in India 🇮🇳',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textTertiaryDark),
+                ),
+              ],
+            ),
           ),
+          const SizedBox(height: AppSpacing.lg),
         ],
       ),
     );
