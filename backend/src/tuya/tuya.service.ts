@@ -163,7 +163,29 @@ export class TuyaService {
       method: 'GET',
       path: `/v2.0/cloud/thing/${deviceId}/shadow/properties`,
     });
-    return (shadow.properties ?? []).map((p) => ({ code: p.code, value: p.value }));
+    const points = (shadow.properties ?? []).map((p) => ({ code: p.code, value: p.value }));
+
+    // The shadow keeps serving its last-known snapshot with success:true
+    // even when the robot is unplugged or off the network — which is
+    // exactly how a dead device once looked "connected" in the app for a
+    // full day. Tuya's device record carries the real reachability flag,
+    // so it's appended here as a synthetic point (prefixed to make clear
+    // it isn't one of the device's own DPs) and surfaced separately from
+    // the app<->backend connection state.
+    let deviceOnline = true;
+    try {
+      const info = await this.client.request<{ online: boolean }>({
+        method: 'GET',
+        path: `/v1.0/devices/${deviceId}`,
+      });
+      deviceOnline = info.online === true;
+    } catch {
+      // Don't fail the whole status poll over the reachability probe —
+      // the DP values above are still good.
+      deviceOnline = true;
+    }
+    points.push({ code: '__device_online', value: deviceOnline });
+    return points;
   }
 
   async getDeviceFunctions(deviceId: string): Promise<TuyaDeviceFunction[]> {

@@ -142,13 +142,6 @@ class BottomControlPanel extends StatelessWidget {
               ),
               const SizedBox(width: AppSpacing.xs),
               BdIconButton(
-                icon: status.isChildLockOn ? Icons.lock_rounded : Icons.lock_open_rounded,
-                active: status.isChildLockOn,
-                onPressed: () => controller.setChildLock(!status.isChildLockOn),
-                tooltip: 'Child Lock',
-              ),
-              const SizedBox(width: AppSpacing.xs),
-              BdIconButton(
                 icon: Icons.warning_amber_rounded,
                 onPressed: controller.emergencyStop,
                 tooltip: 'Emergency Stop',

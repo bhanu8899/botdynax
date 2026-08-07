@@ -43,6 +43,7 @@ class RobotStatus extends Equatable {
     required this.activeErrors,
     required this.isChildLockOn,
     required this.isMopAttached,
+    this.deviceOnline = true,
     required this.faultCodes,
     required this.faultMessages,
     required this.cleaningType,
@@ -128,6 +129,11 @@ class RobotStatus extends Equatable {
   /// data point. False when the robot doesn't report one at all.
   final bool isMopAttached;
 
+  /// Tuya's own reachability flag for the physical robot. Defaults to
+  /// true so transports that don't report it (simulator/BLE/WiFi) behave
+  /// exactly as before rather than showing everything as offline.
+  final bool deviceOnline;
+
   /// Active fault numbers exactly as the robot reported them via its
   /// `total_error` bitmap. The number-to-meaning mapping lives in the
   /// vendor's panel translations rather than any API, so these stay as
@@ -166,6 +172,13 @@ class RobotStatus extends Equatable {
   bool get isSewageTankMissing => faultCodes.contains(25);
   bool get isDustBinMissing => faultCodes.contains(46);
 
+  /// Whether the ROBOT ITSELF is reachable, as opposed to [isOnline]
+  /// which only says this app can reach the backend. Tuya's device
+  /// shadow keeps serving its last-known values with success:true long
+  /// after a robot goes dark, so without this a powered-off robot looks
+  /// perfectly connected — surfaced from Tuya's own reachability flag.
+  bool get isRobotReachable => deviceOnline;
+
   RobotStatus copyWith({
     String? robotId,
     String? name,
@@ -189,6 +202,7 @@ class RobotStatus extends Equatable {
     List<RobotErrorCode>? activeErrors,
     bool? isChildLockOn,
     bool? isMopAttached,
+    bool? deviceOnline,
     List<int>? faultCodes,
     List<String>? faultMessages,
     CleaningType? cleaningType,
@@ -225,6 +239,7 @@ class RobotStatus extends Equatable {
       activeErrors: activeErrors ?? this.activeErrors,
       isChildLockOn: isChildLockOn ?? this.isChildLockOn,
       isMopAttached: isMopAttached ?? this.isMopAttached,
+      deviceOnline: deviceOnline ?? this.deviceOnline,
       faultCodes: faultCodes ?? this.faultCodes,
       faultMessages: faultMessages ?? this.faultMessages,
       cleaningType: cleaningType ?? this.cleaningType,
@@ -262,6 +277,7 @@ class RobotStatus extends Equatable {
         activeErrors,
         isChildLockOn,
         isMopAttached,
+        deviceOnline,
         faultCodes,
         faultMessages,
         cleaningType,

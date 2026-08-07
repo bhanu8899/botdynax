@@ -356,6 +356,12 @@ abstract final class TuyaWireProtocol {
           switchCharge = value! as bool;
         case TuyaDpCodes.status:
           statusStr = value as String?;
+        // Not a device DP — the backend appends this from Tuya's own
+        // device record so a robot that's powered off or off-network
+        // can be told apart from one that's simply idle. See
+        // TuyaService.getDeviceStatus.
+        case '__device_online':
+          status = status.copyWith(deviceOnline: value as bool? ?? true);
       }
     }
 

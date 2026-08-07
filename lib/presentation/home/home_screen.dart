@@ -19,6 +19,8 @@ import '../../domain/entities/consumable.dart';
 import '../../domain/entities/robot_enums.dart';
 import '../../domain/entities/robot_status.dart';
 import '../../domain/transport/robot_transport.dart';
+import '../map/widgets/cleaning_preferences_sheet.dart';
+import '../map/widgets/station_sheet.dart';
 import '../providers/cloud_providers.dart';
 import '../providers/robot_providers.dart';
 import 'widgets/consumable_tile.dart';
@@ -501,10 +503,17 @@ class _Header extends StatelessWidget {
             ],
           ),
         ),
+        // Reflects the ROBOT's reachability, not just this app's link to
+        // the backend — Tuya keeps serving a cached shadow for a robot
+        // that's been powered off, so the two genuinely differ.
         StatusPill(
-          label: status.isOnline ? 'Online' : 'Offline',
-          color: status.isOnline ? AppColors.success : AppColors.textTertiaryDark,
-          pulsing: status.isCleaning,
+          label: !status.isOnline
+              ? 'No connection'
+              : (status.isRobotReachable ? 'Online' : 'Robot offline'),
+          color: status.isOnline && status.isRobotReachable
+              ? AppColors.success
+              : (status.isOnline ? AppColors.warning : AppColors.textTertiaryDark),
+          pulsing: status.isCleaning && status.isRobotReachable,
         ),
       ],
     );
@@ -547,16 +556,35 @@ class _QuickActions extends StatelessWidget {
 
     return Column(
       children: [
-        if (isCleaning)
-          BdPrimaryButton(label: 'Pause', icon: Icons.pause_rounded, onPressed: controller.pause)
-        else if (isPaused)
-          BdPrimaryButton(label: 'Resume', icon: Icons.play_arrow_rounded, onPressed: controller.resume)
-        else
-          BdPrimaryButton(
-            label: 'Start Cleaning',
-            icon: Icons.play_arrow_rounded,
-            onPressed: controller.startCleaning,
-          ),
+        Row(
+          children: [
+            // Start/Resume and Pause are now separate controls rather
+            // than one button that swaps meaning — so Pause is always
+            // where you expect it instead of appearing only mid-clean.
+            Expanded(
+              flex: 2,
+              child: isPaused
+                  ? BdPrimaryButton(
+                      label: 'Resume',
+                      icon: Icons.play_arrow_rounded,
+                      onPressed: controller.resume,
+                    )
+                  : BdPrimaryButton(
+                      label: 'Start Cleaning',
+                      icon: Icons.play_arrow_rounded,
+                      onPressed: isCleaning ? null : controller.startCleaning,
+                    ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: BdSecondaryButton(
+                label: 'Pause',
+                icon: Icons.pause_rounded,
+                onPressed: isCleaning ? controller.pause : null,
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: AppSpacing.sm),
         Row(
           children: [
@@ -575,16 +603,64 @@ class _QuickActions extends StatelessWidget {
               onPressed: isCleaning || isPaused ? controller.stop : null,
               tooltip: 'Stop',
             ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        // Quick access to the three sheets that were previously only
+        // reachable from inside the Live Map screen.
+        Row(
+          children: [
+            Expanded(
+              child: BdSecondaryButton(
+                label: 'Preferences',
+                icon: Icons.tune_rounded,
+                onPressed: () => _openPreferences(context, status, controller),
+              ),
+            ),
             const SizedBox(width: AppSpacing.sm),
-            BdIconButton(
-              icon: status.isChildLockOn ? Icons.lock_rounded : Icons.lock_open_rounded,
-              active: status.isChildLockOn,
-              onPressed: () => controller.setChildLock(!status.isChildLockOn),
-              tooltip: 'Child Lock',
+            Expanded(
+              child: BdSecondaryButton(
+                label: 'Manual',
+                icon: Icons.gamepad_rounded,
+                onPressed: () => context.push(AppRoutes.remoteControl),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: BdSecondaryButton(
+                label: 'Station',
+                icon: Icons.dock_rounded,
+                onPressed: () => showModalBottomSheet<void>(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (_) => StationSheet(status: status, controller: controller),
+                ),
+              ),
             ),
           ],
         ),
       ],
     );
+  }
+
+  Future<void> _openPreferences(
+    BuildContext context,
+    RobotStatus status,
+    RobotController controller,
+  ) async {
+    final (CleaningType, VacuumPower, WaterFlow, int)? result =
+        await showModalBottomSheet<(CleaningType, VacuumPower, WaterFlow, int)>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => CleaningPreferencesSheet(status: status),
+    );
+    if (result == null) return;
+    final (CleaningType type, VacuumPower power, WaterFlow water, int passes) = result;
+    await controller.setCleaningType(type);
+    await controller.setVacuumPower(power);
+    await controller.setWaterLevel(water);
+    await controller.setCleaningPasses(passes);
   }
 }

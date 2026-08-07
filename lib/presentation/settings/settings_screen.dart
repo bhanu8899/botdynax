@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/routing/app_routes.dart';
 import '../../core/storage/local_storage_provider.dart';
@@ -150,21 +149,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ],
             ),
           ),
-          const SizedBox(height: AppSpacing.lg),
-          const _SectionHeader(title: 'Credits'),
-          GlassCard(
-            child: ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.view_in_ar_outlined, color: AppColors.neonCyan),
-              title: const Text('3D robot model'),
-              subtitle: const Text('"Rob-vac" by darkfrei on Sketchfab, CC-BY 4.0'),
-              trailing: const Icon(Icons.open_in_new_rounded, size: 18),
-              onTap: () => launchUrl(
-                Uri.parse('https://sketchfab.com/3d-models/robot-vacuum-cleaner-rob-vac-7d904c05d4204d19a2940d9d6f21ef8d'),
-                mode: LaunchMode.externalApplication,
-              ),
-            ),
-          ),
+          // Credits section removed. This was the CC-BY attribution for
+          // the sourced Sketchfab model — no longer required now that the
+          // 3D asset is BotDyNax's own procedurally-built model rather
+          // than third-party licensed work.
           const SizedBox(height: AppSpacing.lg),
           Center(
             child: Text('BotDyNax v1.0.0', style: theme.textTheme.bodySmall),
