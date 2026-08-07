@@ -116,18 +116,42 @@ class _RobotModel3DState extends State<RobotModel3D> {
       a.length == b.length && a.every(b.contains);
 
   void _apply() {
-    final WebViewController? controller = _controller;
-    if (controller == null) return;
-
     final String clip = _targetClip;
     final int? fault = _activeFaultCode;
     final String? faultMaterial = fault == null ? null : _faultMaterials[fault];
     if (clip == _appliedClip && faultMaterial == _appliedFaultMaterial) return;
     _appliedClip = clip;
     _appliedFaultMaterial = faultMaterial;
+    unawaited(_dispatch(clip, faultMaterial));
+  }
 
+  /// `onWebViewCreated` fires when the WebView exists, NOT when the page
+  /// inside it has finished loading — so an immediate call would run
+  /// against a document where `relatedJs` hasn't executed yet and
+  /// `window.bdApply` is still undefined. The call was silently lost,
+  /// which left the viewer on whichever clip loaded first ('cleaning',
+  /// dock hidden) even while docked. Retry until the hook exists.
+  Future<void> _dispatch(String clip, String? faultMaterial) async {
+    final WebViewController? controller = _controller;
+    if (controller == null) return;
     final String target = faultMaterial == null ? 'null' : '"$faultMaterial"';
-    unawaited(controller.runJavaScript('window.bdApply("$clip", $target);'));
+
+    for (int attempt = 0; attempt < 40; attempt++) {
+      if (!mounted) return;
+      // Bail out if a newer state superseded this one mid-retry.
+      if (clip != _appliedClip || faultMaterial != _appliedFaultMaterial) return;
+      try {
+        final Object ready = await controller
+            .runJavaScriptReturningResult('(typeof window.bdApply === "function").toString()');
+        if (ready.toString().contains('true')) {
+          await controller.runJavaScript('window.bdApply("$clip", $target);');
+          return;
+        }
+      } catch (_) {
+        // Page not ready yet — fall through and retry.
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
   }
 
   /// Injected once per WebView. Holds the pulse loop and the original
