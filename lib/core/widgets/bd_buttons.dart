@@ -38,12 +38,17 @@ class BdPrimaryButton extends StatelessWidget {
                 Icon(icon, size: 20, color: Colors.white),
                 const SizedBox(width: AppSpacing.xs),
               ],
-              Text(
-                label,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: Colors.white,
-                      fontSize: 15,
-                    ),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: Colors.white,
+                        fontSize: 15,
+                      ),
+                ),
               ),
             ],
           );
@@ -111,6 +116,11 @@ class BdSecondaryButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.sm + 2),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadii.pill)),
         ),
+        // The label is Flexible + ellipsised rather than laid out at its
+        // intrinsic width: with a long label ("Return to Dock") sharing a
+        // row with icon buttons, the icon + text pair could exceed the
+        // Expanded slot and throw a RenderFlex overflow. Shrinking the
+        // text is the graceful failure here; overflowing isn't.
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -118,7 +128,15 @@ class BdSecondaryButton extends StatelessWidget {
               Icon(icon, size: 20, color: textColor),
               const SizedBox(width: AppSpacing.xs),
             ],
-            Text(label, style: Theme.of(context).textTheme.labelLarge?.copyWith(color: textColor)),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(color: textColor),
+              ),
+            ),
           ],
         ),
       ),
