@@ -93,12 +93,18 @@ class BdSecondaryButton extends StatelessWidget {
     super.key,
     this.icon,
     this.expand = true,
+    this.dense = false,
   });
 
   final String label;
   final VoidCallback? onPressed;
   final IconData? icon;
   final bool expand;
+
+  /// Tighter padding and a smaller label, for buttons sharing a row three
+  /// or four across. Without this the default padding eats the slot and
+  /// the label ellipsises down to "Pre…" / "Sta…".
+  final bool dense;
 
   @override
   Widget build(BuildContext context) {
@@ -113,7 +119,10 @@ class BdSecondaryButton extends StatelessWidget {
         style: OutlinedButton.styleFrom(
           foregroundColor: textColor,
           side: BorderSide(color: borderColor, width: 1.2),
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.sm + 2),
+          padding: EdgeInsets.symmetric(
+            horizontal: dense ? AppSpacing.xs : AppSpacing.lg,
+            vertical: AppSpacing.sm + 2,
+          ),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadii.pill)),
         ),
         // The label is Flexible + ellipsised rather than laid out at its
@@ -125,8 +134,8 @@ class BdSecondaryButton extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              Icon(icon, size: 20, color: textColor),
-              const SizedBox(width: AppSpacing.xs),
+              Icon(icon, size: dense ? 17 : 20, color: textColor),
+              SizedBox(width: dense ? 4 : AppSpacing.xs),
             ],
             Flexible(
               child: Text(
@@ -134,7 +143,10 @@ class BdSecondaryButton extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(color: textColor),
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: textColor,
+                      fontSize: dense ? 12.5 : null,
+                    ),
               ),
             ),
           ],

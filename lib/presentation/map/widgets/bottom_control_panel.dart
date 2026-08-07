@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
-import '../../../core/routing/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/bd_buttons.dart';
@@ -9,8 +7,6 @@ import '../../../core/widgets/glass_card.dart';
 import '../../../domain/entities/robot_enums.dart';
 import '../../../domain/entities/robot_status.dart';
 import '../../providers/robot_providers.dart';
-import 'cleaning_preferences_sheet.dart';
-import 'station_sheet.dart';
 
 /// The floating "bottom control panel" — cleaning-mode selector plus the
 /// full set of run controls, overlaid on the Live Map so you can watch the
@@ -75,38 +71,10 @@ class BottomControlPanel extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.xs),
-          Row(
-            children: [
-              Expanded(
-                child: _ModeChip(
-                  label: 'Manual',
-                  icon: Icons.gamepad_outlined,
-                  onTap: () => context.push(AppRoutes.remoteControl),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.xs),
-              Expanded(
-                child: _ModeChip(
-                  label: 'Preferences',
-                  icon: Icons.tune_rounded,
-                  onTap: () => _openPreferences(context, status, controller),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.xs),
-              Expanded(
-                child: _ModeChip(
-                  label: 'Station',
-                  icon: Icons.home_repair_service_outlined,
-                  onTap: () => showModalBottomSheet<void>(
-                    context: context,
-                    isScrollControlled: true,
-                    builder: (_) => StationSheet(status: status, controller: controller),
-                  ),
-                ),
-              ),
-            ],
-          ),
+          // Manual / Preferences / Station used to sit here too. They now
+          // live on the Home dashboard, so duplicating them inside the
+          // map panel just crowded it — the map keeps only the controls
+          // that are actually about the map (cleaning modes + run state).
           const SizedBox(height: AppSpacing.md),
           Row(
             children: [
@@ -153,23 +121,6 @@ class BottomControlPanel extends StatelessWidget {
     );
   }
 
-  Future<void> _openPreferences(
-    BuildContext context,
-    RobotStatus status,
-    RobotController controller,
-  ) async {
-    final result = await showModalBottomSheet<
-        ({CleaningType type, VacuumPower power, WaterFlow water, int passes})>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => CleaningPreferencesSheet(status: status),
-    );
-    if (result == null) return;
-    await controller.setCleaningType(result.type);
-    await controller.setVacuumPower(result.power);
-    await controller.setWaterLevel(result.water);
-    await controller.setCleaningPasses(result.passes);
-  }
 }
 
 class _ModeChip extends StatelessWidget {

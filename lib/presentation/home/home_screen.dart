@@ -580,6 +580,7 @@ class _QuickActions extends StatelessWidget {
               child: BdSecondaryButton(
                 label: 'Pause',
                 icon: Icons.pause_rounded,
+                dense: true,
                 onPressed: isCleaning ? controller.pause : null,
               ),
             ),
@@ -614,6 +615,7 @@ class _QuickActions extends StatelessWidget {
               child: BdSecondaryButton(
                 label: 'Preferences',
                 icon: Icons.tune_rounded,
+                dense: true,
                 onPressed: () => _openPreferences(context, status, controller),
               ),
             ),
@@ -622,6 +624,7 @@ class _QuickActions extends StatelessWidget {
               child: BdSecondaryButton(
                 label: 'Manual',
                 icon: Icons.gamepad_rounded,
+                dense: true,
                 onPressed: () => context.push(AppRoutes.remoteControl),
               ),
             ),
@@ -630,6 +633,7 @@ class _QuickActions extends StatelessWidget {
               child: BdSecondaryButton(
                 label: 'Station',
                 icon: Icons.dock_rounded,
+                dense: true,
                 onPressed: () => showModalBottomSheet<void>(
                   context: context,
                   isScrollControlled: true,

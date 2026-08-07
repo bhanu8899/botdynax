@@ -210,6 +210,12 @@ class _RobotModel3DState extends State<RobotModel3D> {
             loading: Loading.eager,
             reveal: Reveal.auto,
             autoPlay: true,
+            // Declare the clip up front. With autoPlay alone, model-viewer
+            // starts whichever clip is first in the file ('cleaning',
+            // which hides the dock) and only switches once the injected
+            // JS runs — so a docked robot briefly, or on a slow WebView
+            // permanently, rendered with no dock beside it.
+            animationName: _targetClip,
             cameraControls: true,
             disableZoom: true,
             cameraOrbit: '28deg 66deg 105%',

@@ -33,14 +33,24 @@ class _CleaningPreferencesSheetState extends State<CleaningPreferencesSheet> {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
 
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: AppSpacing.lg,
-          right: AppSpacing.lg,
-          top: AppSpacing.lg,
-          bottom: AppSpacing.lg + MediaQuery.of(context).viewInsets.bottom,
-        ),
+    // Carries its own opaque surface rather than relying on the default
+    // bottom-sheet background: callers pass backgroundColor:transparent
+    // so the rounded corners render cleanly, which previously left the
+    // sheet see-through with the dashboard bleeding through the text.
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(AppSpacing.lg)),
+        border: Border(top: BorderSide(color: theme.dividerColor.withValues(alpha: 0.4))),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: AppSpacing.lg,
+            right: AppSpacing.lg,
+            top: AppSpacing.lg,
+            bottom: AppSpacing.lg + MediaQuery.of(context).viewInsets.bottom,
+          ),
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -119,6 +129,7 @@ class _CleaningPreferencesSheetState extends State<CleaningPreferencesSheet> {
                 ),
               ),
             ],
+            ),
           ),
         ),
       ),
@@ -189,7 +200,17 @@ class _SegmentChip extends StatelessWidget {
             children: [
               Icon(icon, size: 16, color: textColor),
               const SizedBox(width: 6),
-              Text(label, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: textColor)),
+              // Flexible + ellipsis so a longer option name ("Mop after
+              // vacuum") shrinks instead of being clipped mid-word when
+              // several chips share a row.
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(color: textColor),
+                ),
+              ),
             ],
           ),
         ),
