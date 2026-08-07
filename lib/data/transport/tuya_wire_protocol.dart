@@ -113,6 +113,11 @@ class TuyaFault {
     // time. The two tanks report genuinely distinct codes.
     25: 'Sewage tank removed',
 
+    // Robot picked up / wheels off the ground -> 0x08. Confirmed on the
+    // real machine by lifting it. This is the lift detection that had no
+    // known signal until it was captured empirically.
+    8: 'Robot lifted off the ground',
+
     // The robot's internal dust bin (separate component from the dock's
     // dust bag, code 18) pulled out -> 0x2E.
     46: 'Dust bin removed from robot',

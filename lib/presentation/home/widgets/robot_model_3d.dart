@@ -242,8 +242,13 @@ class _RobotModel3DState extends State<RobotModel3D> {
             animationName: _targetClip,
             cameraControls: true,
             disableZoom: true,
-            cameraOrbit: '28deg 66deg 105%',
-            minCameraOrbit: 'auto auto 0.4m',
+            cameraOrbit: '0deg 66deg 105%',
+            // Horizontal swipe only, and only ±90° of it. Free orbiting
+            // let the model be tipped under the floor plane or spun
+            // upside down, which reads as broken rather than as a
+            // product view; pinning phi keeps the robot level.
+            minCameraOrbit: '-90deg 66deg 105%',
+            maxCameraOrbit: '90deg 66deg 105%',
             shadowIntensity: 0.9,
             shadowSoftness: 0.7,
             exposure: 1.1,

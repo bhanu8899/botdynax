@@ -5,6 +5,8 @@ import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/notifications/local_notifications_provider.dart';
+import '../../core/notifications/local_notifications_service.dart';
 import '../../core/routing/app_routes.dart';
 import '../../core/storage/local_storage_provider.dart';
 import '../../core/theme/app_colors.dart';
@@ -131,6 +133,39 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
+  /// Fixed id so re-raising a fault replaces the existing shade entry
+  /// rather than stacking a new one on every 3-second poll.
+  static const int _faultNotificationId = 1001;
+
+  /// Raises a real system notification (sound + heads-up banner) when a
+  /// fault appears, and clears it when the fault is resolved. The
+  /// in-app SnackBar only exists while the dashboard is on screen, so it
+  /// alone never actually alerted anyone who wasn't already looking.
+  void _syncFaultNotification(RobotStatus? previous, RobotStatus? current) {
+    if (current == null) return;
+    final LocalNotificationsService notifications = ref.read(localNotificationsProvider);
+
+    final String message = current.faultMessages.isNotEmpty
+        ? current.faultMessages.join('\n')
+        : 'Your robot needs attention.';
+    final bool had = previous?.hasErrors ?? false;
+
+    if (!current.hasErrors) {
+      if (had) unawaited(notifications.cancel(_faultNotificationId));
+      return;
+    }
+    // Only fire on the transition, or when the fault text itself
+    // changes — otherwise every poll would re-alert.
+    final String? previousMessage = previous?.faultMessages.join('\n');
+    if (had && previousMessage == current.faultMessages.join('\n')) return;
+
+    unawaited(notifications.show(
+      id: _faultNotificationId,
+      title: 'BotDyNax needs attention',
+      body: message,
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     final AsyncValue<RobotStatus> statusAsync = ref.watch(robotStatusProvider);
@@ -145,11 +180,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // user had already fixed the problem. Watching the status directly
     // lets it be dismissed the moment the robot stops reporting the fault.
     ref.listen(robotStatusProvider, (AsyncValue<RobotStatus>? prev, AsyncValue<RobotStatus> next) {
+      final RobotStatus? now = next.valueOrNull;
       final bool had = prev?.valueOrNull?.hasErrors ?? false;
-      final bool has = next.valueOrNull?.hasErrors ?? false;
+      final bool has = now?.hasErrors ?? false;
       if (had && !has && mounted) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
       }
+      _syncFaultNotification(prev?.valueOrNull, now);
     });
 
     return Scaffold(
@@ -657,18 +694,22 @@ class _QuickActions extends StatelessWidget {
     RobotStatus status,
     RobotController controller,
   ) async {
-    final (CleaningType, VacuumPower, WaterFlow, int)? result =
-        await showModalBottomSheet<(CleaningType, VacuumPower, WaterFlow, int)>(
+    // Must match what CleaningPreferencesSheet actually pops — a NAMED
+    // record. Declaring the positional shape here made the route's type
+    // argument disagree with the popped value, which surfaced as a
+    // Navigator '!_debugLocked' assertion when saving rather than as a
+    // plain cast error.
+    final ({CleaningType type, VacuumPower power, WaterFlow water, int passes})? result =
+        await showModalBottomSheet<({CleaningType type, VacuumPower power, WaterFlow water, int passes})>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => CleaningPreferencesSheet(status: status),
     );
     if (result == null) return;
-    final (CleaningType type, VacuumPower power, WaterFlow water, int passes) = result;
-    await controller.setCleaningType(type);
-    await controller.setVacuumPower(power);
-    await controller.setWaterLevel(water);
-    await controller.setCleaningPasses(passes);
+    await controller.setCleaningType(result.type);
+    await controller.setVacuumPower(result.power);
+    await controller.setWaterLevel(result.water);
+    await controller.setCleaningPasses(result.passes);
   }
 }
